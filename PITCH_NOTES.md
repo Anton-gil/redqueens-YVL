@@ -18,10 +18,10 @@ Speaker notes for the demo. Every pipeline number is a `<!--NUM:...-->` marker f
 > classes, and an advisory format that plugs into an emergency-role / timelock / vote model.
 >
 > Here's the honest headline. Our *first* guard was the max-delta class that protocols already specify — and we
-> proved it is **insufficient**: <!--NUM:bypass_v1.n_bypassed--> bypasses in the normal case. Our *fix* moves the
+> proved it is **insufficient**: 5 bypasses in the normal case. Our *fix* moves the
 > check to the single value-crediting chokepoint and anchors it to an independent price feed. Against the same
-> attacks it leaves <!--NUM:bypass_v2.n_bypassed--> bypasses, at ~<!--NUM:guard_v2.gas_overhead_pct-->% gas
-> overhead, with **real** validation — <!--NUM:validation_v2.false_positives--> false positives on measured
+> attacks it leaves 0 bypasses, at ~2.4% gas
+> overhead, with **real** validation — 0 false positives on measured
 > benign deviation. We don't claim any live protocol is broken. We show a guard *class* is weak and ship the
 > stronger one.
 
@@ -46,7 +46,7 @@ architecture and say so — our contribution is the RWA domain modeling, not the
 **3. Why did your first guard fail?**
 Because a max-delta bound on `exchangeRate()` at the `deposit()` entry point checks the wrong thing in the wrong
 place. It's an opt-in wrapper, it checkpoints *after* the donation, and it's scoped to one function. We
-demonstrated <!--NUM:bypass_v1.n_bypassed--> concrete bypasses: (1) first-in-fresh-block atomic — the checkpoint
+demonstrated 5 concrete bypasses: (1) first-in-fresh-block atomic — the checkpoint
 is taken after the donation; (2) direct call around the opt-in wrapper; (3) the `depositAndMint` multicall path,
 which the guard never covered; (4) spreading the donation across ~20 blocks to beat the 1-block window. That
 failure is the point of the project — it's why the fix has to be an anchored check at the value-crediting
@@ -56,8 +56,8 @@ chokepoint, enforced on every path.
 `AccountManagerV2` routes all principal credit through one chokepoint, `_creditPrincipal`, and anchors credited
 value to the **independent** raw USD-per-collateral-token feed (`priceRouter.usdFeedOf(...).latestPrice()`),
 not the pool-derived `getPrice()` that carries the manipulation. It's on deposit *and* depositAndMint, so it's
-not opt-in. Result: <!--NUM:bypass_v2.n_bypassed--> bypasses vs <!--NUM:bypass_v1.n_bypassed--> for v1, at
-~<!--NUM:guard_v2.gas_overhead_pct-->% overhead. We're also honest that v2 is still a *guard*; the root-cause fix
+not opt-in. Result: 0 bypasses vs 5 for v1, at
+~2.4% overhead. We're also honest that v2 is still a *guard*; the root-cause fix
 is the valuation formula itself (credit shares×price-per-share).
 
 **5. Where's the AI?**
@@ -78,16 +78,16 @@ We ran the real-contract recon anyway and reported the honest "no applicable sur
 For v1, we're blunt: the "0 false positives at a 15.9% threshold" number is **vacuous**. The benign exchange
 rate never moves off `1e18`, so that threshold is ~10× a rounding artifact, not a fitted bound. For v2 the
 validation is real — we measure benign *conversion-ratio* deviation: max observed
-<!--NUM:validation_v2.max_observed_bps--> bps, threshold <!--NUM:validation_v2.threshold_bps--> bps,
-<!--NUM:validation_v2.false_positives--> false positives over <!--NUM:validation_v2.applicable_traces_checked-->
+0 bps, threshold 100 bps,
+0 false positives over 40
 applicable traces. Every advisory still ships coverage warnings; empirical is not formal proof.
 
 **8. Isn't "$47,000 profit" from a huge donation obviously irrational?**
-Yes — and we fixed the framing. The naive PoC (donate <!--NUM:attack.irrational.donation-->, deposit
-<!--NUM:attack.irrational.deposit-->) actually nets the attacker <!--NUM:attack.irrational.attacker_net_usd-->,
-a loss. Under rational parameters (donate <!--NUM:attack.economics.donation-->, deposit
-<!--NUM:attack.economics.deposit--> against a <!--NUM:attack.economics.pool_balance_before--> pool) the attack
-nets <!--NUM:attack.economics.attacker_net_usd--> and leaves <!--NUM:attack.economics.bad_debt_usd--> of protocol
+Yes — and we fixed the framing. The naive PoC (donate 230,000, deposit
+1) actually nets the attacker -$459,954,000,
+a loss. Under rational parameters (donate 5,000, deposit
+100,000 against a 10,000 pool) the attack
+nets $90,000,000 and leaves $100,000,000 of protocol
 bad debt. The profit condition is simple: **the attack pays when the deposit exceeds the pool**, and the attacker
 exits via rwaUSD redeemable near $1. We report bad debt, not gross mint.
 

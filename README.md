@@ -113,7 +113,7 @@ We are explicit about the gap between our test system and the live protocol, bec
 - **So Vuln A is a bug we *injected* into the mocks**, and the v1 guard class (max-delta) is one Multipli's spec
   already includes. **We do not claim Multipli is vulnerable.**
 - **Our contribution** is the finding that a **max-delta guard at an entry point is insufficient** — it has
-  <!--NUM:bypass_v1.n_bypassed--> bypasses in the normal case — and that the durable fix is an **anchored
+  5 bypasses in the normal case — and that the durable fix is an **anchored
   conversion-integrity check at the value-crediting chokepoint** (v2), enforced on every path. That is a
   strengthening recommendation for the guard *class*, not an exploit of a live deployment.
 
@@ -236,13 +236,13 @@ conversion-integrity chokepoint)**.
   repository ships 3 reference exploit PoCs (`test/ExploitVulnA/B/C.t.sol`) reproducing Vuln A/B/C. The
   deterministic `FallbackAgent` finds every embedded vuln with **0 LLM calls, $0.00 cost**.
 - **Vuln A (`adapter_donation`) — the economics matter.** The naive PoC (donate a huge amount, deposit dust) is
-  *irrational*: donate <!--NUM:attack.irrational.donation--> and deposit <!--NUM:attack.irrational.deposit-->
-  and the attacker nets <!--NUM:attack.irrational.attacker_net_usd--> (a large **loss** — the donation is
-  unrecoverable). Under **rational** parameters (donate <!--NUM:attack.economics.donation-->, deposit
-  <!--NUM:attack.economics.deposit--> against a pool of <!--NUM:attack.economics.pool_balance_before-->), the
-  attack mints <!--NUM:attack.economics.minted_usd--> and the attacker nets
-  <!--NUM:attack.economics.attacker_net_usd-->, leaving <!--NUM:attack.economics.bad_debt_usd--> of protocol
-  **bad debt**. Profit condition: `<!--NUM:attack.economics.profit_condition-->` — in plain terms, **the attack
+  *irrational*: donate 230,000 and deposit 1
+  and the attacker nets -$459,954,000 (a large **loss** — the donation is
+  unrecoverable). Under **rational** parameters (donate 5,000, deposit
+  100,000 against a pool of 10,000), the
+  attack mints $300,000,000 and the attacker nets
+  $90,000,000, leaving $100,000,000 of protocol
+  **bad debt**. Profit condition: `deposit > pool  (net = usd*D*(deposit/pool - 1))` — in plain terms, **the attack
   pays when the deposit exceeds the pool**, and the attacker can exit via rwaUSD redeemable near \$1.
 - **Vuln C (`stale_price_multicall`)** — same bad-debt class via `depositAndMint()`.
 - **Vuln B (`unit_composition_error`)** — a **depositor-loss** finding (attacker profit **$0**), reported as a
@@ -255,7 +255,7 @@ conversion-integrity chokepoint)**.
 The differ flags `GoldAdapter.exchangeRate` as the top anomaly and synthesizes **ExchangeRateDeltaBound**, an
 opt-in `deposit()`-scoped wrapper with a 1-block window — the same max-delta class Multipli's documented
 PriceGuards already specify. Its "re-attack reverts" claim holds **only** when an honest deposit pre-warms the
-checkpoint in the same block. Red Queen's bypass analyzer confirms **<!--NUM:bypass_v1.n_bypassed--> bypasses**
+checkpoint in the same block. Red Queen's bypass analyzer confirms **5 bypasses**
 in the normal case:
 
 1. **First-in-fresh-block atomic** — the checkpoint is taken *after* the donation, so a first guarded call in a
@@ -264,7 +264,7 @@ in the normal case:
 3. **`depositAndMint` multicall path** — not behind the `deposit()`-scoped guard at all.
 4. **20-block spread** — a 1-block window re-checkpoints at the already-inflated rate.
 
-- **v1 validation is VACUOUS.** The fitted threshold (`<!--NUM:validation_v1.threshold_bps-->` bps, the reported
+- **v1 validation is VACUOUS.** The fitted threshold (`1590` bps, the reported
   "0 false positives") is not a real bound: the benign exchange rate never moves off `1e18`, so the number is
   ~10× a rounding artifact, not a measured benign deviation. We flag this rather than tout it.
 
@@ -275,16 +275,16 @@ the single value-crediting chokepoint (`_creditPrincipal`), anchoring credited v
 USD-per-collateral-token feed (`priceRouter.usdFeedOf(adapter).latestPrice()`) rather than the pool-derived
 `getPrice()`. It runs in **every** path (deposit + depositAndMint), so it is not opt-in.
 
-- **Bypass resistance.** Against the same suite, v2 leaves **<!--NUM:bypass_v2.n_bypassed--> bypasses** and
-  blocks **<!--NUM:bypass_v2.n_blocked-->** — including the fresh-block, multicall, and multi-block-spread
+- **Bypass resistance.** Against the same suite, v2 leaves **0 bypasses** and
+  blocks **7** — including the fresh-block, multicall, and multi-block-spread
   attacks that defeated v1.
 - **Validation is now real.** v2 measures actual benign conversion-ratio deviation: max observed
-  **<!--NUM:validation_v2.max_observed_bps--> bps**, threshold **<!--NUM:validation_v2.threshold_bps--> bps**,
-  **<!--NUM:validation_v2.false_positives--> false positives** across
-  <!--NUM:validation_v2.applicable_traces_checked--> applicable traces.
-- **Gas.** Measured overhead **<!--NUM:guard_v2.gas_overhead--> gas (~<!--NUM:guard_v2.gas_overhead_pct-->% of a
-  plain deposit)**; plain deposit <!--NUM:guard_v2.gas_plain_deposit--> gas vs. guarded
-  <!--NUM:guard_v2.gas_guarded_deposit--> gas.
+  **0 bps**, threshold **100 bps**,
+  **0 false positives** across
+  40 applicable traces.
+- **Gas.** Measured overhead **3,175 gas (~2.4% of a
+  plain deposit)**; plain deposit 131,421 gas vs. guarded
+  134,596 gas.
 - **Legit deposits pass**; only over-crediting (bad-debt direction) reverts.
 
 ---
@@ -294,7 +294,7 @@ USD-per-collateral-token feed (`priceRouter.usdFeedOf(adapter).latestPrice()`) r
 Two complete, governance-ready advisories are generated (Markdown + styled PDF):
 
 - **`advisories/RQ-2026-0001`** — Vuln A (Adapter Conversion Integrity, GoldAdapter), impact reported as
-  protocol bad debt under rational economics (<!--NUM:attack.economics.bad_debt_usd-->).
+  protocol bad debt under rational economics ($100,000,000).
 - **`advisories/RQ-2026-0002`** — Vuln C (stale-read multicall, AccountManager), same bad-debt class.
 
 Each advisory includes: exploit summary, reproducible Foundry PoC, an **Economics** block (pool / donation /
