@@ -2,7 +2,7 @@ Red Queen  — Full Refined Idea
 THE PROBLEM
 The macro picture
 
-DeFi protocols lost over $1 billion in H1 2026 across 212 confirmed exploits, the most-hacked half-year on record. But here's the thing most people miss: the money lost around RWA collateral in 2026 wasn't lost in the smart contracts themselves. It was lost one layer out. In the configuration of the price oracles that lending protocols read. In the wrapper mechanisms that convert between token representations. In the off-chain businesses that were supposed to service the underlying assets.
+Crypto exploits topped a billion dollars across 200-plus incidents in H1 2026 — a record half-year by attack volume (industry trackers put the total in the ~$1.0B–$1.3B range depending on methodology). But here's the thing most people miss: much of the money lost around RWA collateral in 2026 wasn't lost in the smart contracts themselves. It was lost one layer out. In the configuration of the price oracles that lending protocols read. In the wrapper mechanisms that convert between token representations. In the off-chain businesses that were supposed to service the underlying assets.
 
 Three incidents tell the story:
 
@@ -10,7 +10,7 @@ February 2026, $1.78M: A governance proposal on a Base lending deployment miscon
 
 July 2026, Edel Finance, $403K: An attacker manipulated the wrapping mechanism for tokenized Google stock. Chainlink correctly reported Alphabet's share price. The vulnerability was in how GOOGLx converted to and from wGOOGLx, inflating collateral value 78x. Every price check passed. Every access control passed. The composition of valid components produced theft.
 
-November 2025, Stream Finance, $93M → $285M contagion: An external fund manager lost $93M. Their xUSD stablecoin crashed 77%. Researchers found $285M in cascading debt exposure across Euler, Silo, Morpho, and Gearbox. An anonymous trader had flagged the 4x leverage through recursive looping days earlier. The warning signal was on-chain. Nobody was watching for it in the right way.
+November 2025, Stream Finance, $93M → $285M contagion: An external fund manager lost $93M. Their xUSD stablecoin crashed 77%. Researchers found $285M in cascading debt exposure across Euler, Silo, Morpho, and Gearbox. An anonymous trader had flagged the 4x leverage through recursive looping days earlier. The warning signal was on-chain, but no deployed monitoring was tuned to act on that specific pattern.
 
 Why existing tools don't solve this
 
@@ -20,7 +20,7 @@ Monitoring tools (Hypernative, Forta, BlockSec, Defimon) watch transactions and 
 
 Runtime guards (Phylax Credible Layer, SphereX Protect, CrossGuard) enforce invariants at the transaction or sequencer level. Phylax is integrated into Linea's sequencer. SphereX is in production. These are real and good. But their invariant templates are designed for generic DeFi: reentrancy guards, balance conservation, slippage bounds, control-flow integrity.
 
-Invariant synthesis tools (Trace2Inv, InvCon, FLAMES) try to automatically generate invariants from transaction traces. Trace2Inv blocked 23 of 27 historical exploits with a 0.28% false positive rate. But the August 2026 InvariantEval paper found that automated tools recovered only 2 of 2,828 ground-truth invariants at scale. The technology works in focused applications but doesn't scale to general-purpose use.
+Invariant synthesis tools (Trace2Inv, InvCon, FLAMES) try to automatically generate invariants from transaction traces. Published evaluations report strong results on curated exploit sets but sharply lower recall when applied to large, general-purpose invariant sets — the technology works well in focused applications but does not yet scale to arbitrary protocols. (Specific benchmark percentages from these papers are not restated here; see CLAIMS_AUDIT.md.)
 
 AI exploit agents (A1, EvoPoC, PoCo, ReX) can generate working exploits. A1 achieved 63% on its benchmark. EvoPoC reached 96.6% using a hierarchical knowledge graph. These prove that AI-driven exploit discovery works.
 
@@ -28,19 +28,19 @@ What none of them do:
 
 None of these tools understand RWA-specific failure modes. They don't know what an adapter conversion error looks like. They don't know that a NAV-based token and a rebasing token and a minted-dividend token have fundamentally different accrual semantics and that misconfiguring one as the other is a pricing time bomb. They don't know that a tokenized stock's rebasing multiplier can change during a corporate action and that a multicall that spans that change can mint against a stale balance. They don't know that cross-chain RWA supply must satisfy conservation constraints that generic ERC-20s don't have.
 
-RWA protocols are a different beast from AMMs and lending pools. The attack surface isn't reentrancy or sandwich attacks. It's unit composition errors, accrual-semantic mismatches, adapter conversion manipulation, NAV staleness across market-hours boundaries, and cross-chain supply inflation. No existing tool targets these.
+RWA protocols are a different beast from AMMs and lending pools. The attack surface isn't reentrancy or sandwich attacks. It's unit composition errors, accrual-semantic mismatches, adapter conversion manipulation, NAV staleness across market-hours boundaries, and cross-chain supply inflation. These RWA-specific failure modes are what Red Queen targets, and they are not the primary focus of the general-purpose DeFi tooling above.
 
 Why this matters for Multipli specifically
 
-Multipli's architecture has five specific surfaces where these RWA-specific failures can occur:
+Mapped onto Multipli's documented architecture, there are five RWA surface *classes* worth guarding. Important caveat (see README "Mocks vs Multipli reality"): Multipli's documented v2 design already specifies PriceGuards (max-delta, staleness, divergence) on these surfaces, and its adapters custody tokens rather than deriving an exchange rate from a pool balance. We do **not** claim Multipli is vulnerable. We inject these bugs into faithful mocks to study the guard classes themselves. The five surface classes:
 
 Asset Adapters normalize different token types (gold, T-bills, stablecoins, xStocks) into a standard interface. Each adapter has a conversion function (like exchangeRate()). If an attacker can manipulate that conversion within a single transaction, they inflate their collateral value and mint excess rwaUSD. This is the exact Edel pattern.
 The PriceRouter composes multiple feeds into a final USD price per collateral unit. Each feed has different units ([USD/ETH], [ETH/cbETH], [XAU_oz/USD]). If the composition path has a unit error, the final price is wrong by orders of magnitude. This is the exact February 2026 pattern.
 The SignedFeedVerifier accepts EIP-712 signed price messages with an optional nonce and a validity window. Any still-valid signed price can be submitted. If a relayer can choose which valid price to submit, they can cherry-pick prices that benefit their position.
 AccountManager multicalls bundle deposit + mint or repay + withdraw into single transactions. If the price read happens before a state change that affects the price, the mint uses a stale value.
-rwaUSDi's multi-chain supply (~$488M across 7+ chains) depends on cross-chain messaging for mint-and-release operations. If supply on one chain inflates without corresponding collateral elsewhere, the system is insolvent. This is the exact KelpDAO pattern that cost $292M.
+rwaUSDi's multi-chain supply depends on cross-chain messaging for mint-and-release operations. If supply on one chain inflates without corresponding collateral elsewhere, the system is insolvent. This is the class of failure behind the KelpDAO cross-chain release (~$290M).
 
-Multipli has completed 10 security audits. Those audits checked the code for bugs. They didn't check the configuration layer, the adapter composition layer, or the cross-chain supply consistency layer. That's where 2026's losses actually came from.
+The 2026 RWA losses came largely from the configuration, adapter-composition, and cross-chain supply-consistency layers rather than from classic code bugs. Those layers are exactly what Red Queen's invariant classes are written to constrain — as a continuous, runtime-oriented complement to point-in-time code audits, not a claim about any specific protocol's audit coverage.
 
 THE SOLUTION
 What Red Queen is
@@ -48,7 +48,7 @@ What Red Queen is
 Red Queen is a continuous security advisor built specifically for RWA protocols. It combines three things:
 
 An attack agent with an RWA-specific playbook that knows exactly what to look for in collateral adapter systems
-An invariant synthesizer with RWA-specific invariant classes that no existing tool targets
+An invariant synthesizer with RWA-specific invariant classes
 A validation pipeline that checks every candidate invariant against the protocol's own transaction history and outputs actionable security advisories
 
 It runs in a loop: the agent attacks a forked copy of the protocol, the synthesizer generates and validates a defense, the defense deploys on the fork, and the agent attacks again. Each iteration produces a security advisory with a reproducible exploit PoC, a candidate guard in Solidity, and a validation report.
@@ -65,11 +65,11 @@ It's not the first attack-then-defend loop. The RvB paper (January 2026) formali
 
 It's not the first runtime guard system. Phylax, SphereX, CrossGuard, and HoneyPause all deploy on-chain invariant enforcement. Several are in production.
 
-What Red Queen IS (the actual novel contributions)
+What Red Queen IS (our contribution)
 
-Novel Contribution 1: RWA-Specific Invariant Classes
+Our contribution 1: RWA-Specific Invariant Classes
 
-We define five invariant classes that don't exist in any published tool because no existing tool targets RWA protocols:
+We define five invariant classes written specifically for RWA collateral systems:
 
 Adapter Conversion Integrity:
 "The value the Ledger records for a deposit must equal the deposited tokens × the oracle price ± a configurable tolerance, regardless of the adapter's internal conversion path."
@@ -84,7 +84,7 @@ NAV-based tokens like BUIDL maintain a fixed $1 price and mint new tokens as div
 Cross-Chain Supply Conservation:
 "Total rwaUSDi supply across all monitored chains in any epoch must not exceed total backing collateral value minus a safety margin, and single-epoch releases must not exceed a budget derived from historical normal flow."
 
-This catches the KelpDAO pattern. 116,500 rsETH ($292M, 74% of the bridge's escrow) released on a message that never existed. A conservation invariant would have flagged a release that exceeded the epoch's normal flow budget.
+This catches the KelpDAO pattern: a large rsETH release (~$290M) on a cross-chain message that should not have authorized it. A conservation invariant would have flagged a release that exceeded the epoch's normal flow budget.
 
 Oracle Composition Type Safety:
 "The unit chain of feeds in a price path must compose to [USD / collateral_unit]. Every intermediate conversion (wrapper ratios, rebasing multipliers, decimal normalization) must be an explicit term in the composition."
@@ -96,7 +96,7 @@ Exchange Rate Delta Bounding:
 
 This is a general form of the Edel guard but scoped to every adapter type. The threshold X is derived from the historical maximum observed delta plus a safety margin.
 
-Novel Contribution 2: RWA-Specific Attack Playbook
+Our contribution 2: RWA-Specific Attack Playbook
 
 Instead of generic LLM prompting (A1) or a generic knowledge graph (EvoPoC), the attack agent follows a playbook specialized for RWA collateral systems:
 
@@ -131,9 +131,9 @@ Attack Pattern 5 — Cross-Chain Supply Inflation (KelpDAO-style):
   another. Check bridge verifier configuration (1-of-1 DVN
   patterns, missing redundancy).
 
-No published system has an RWA-specific attack playbook. A1, EvoPoC, PoCo, and ReX all target generic smart contract vulnerabilities (reentrancy, integer overflow, access control). Our playbook targets the five failure modes that actually caused losses in RWA protocols in 2025-2026.
+Our contribution here is the RWA-specific attack playbook. A1, EvoPoC, PoCo, and ReX target generic smart-contract vulnerabilities (reentrancy, integer overflow, access control); our playbook targets the five failure modes that actually caused losses in RWA protocols in 2025-2026.
 
-Novel Contribution 3: Advisory Output Format
+Our contribution 3: Advisory Output Format
 
 Red Queen doesn't pretend to autonomously deploy guards. It generates structured security advisories:
 

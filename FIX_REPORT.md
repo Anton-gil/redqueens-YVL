@@ -39,3 +39,30 @@ Bare `vm.expectRevert(<Error>.selector)` does NOT match an error WITH arguments 
 
 ### Decision — attacker.py FallbackAgent
 The rational economics + grid are computed and, at the chosen point, FORGE-CONFIRMED via test/ExploitVulnA|C.t.sol; attack_result.json carries the economics blocks. The attacker.py FallbackAgent demo bodies were left as invariant-violation demonstrators (still true) rather than surgically re-parameterized, to avoid destabilizing the shared agent near deadline. Numbers that docs/frontend read come from attack_result.json (forge-confirmed).
+
+### Cross-agent request — Agent F (Docs & Claims), Phase 4 NUM fill map
+Docs are done. README.md / PITCH_NOTES.md contain `<!--NUM:key-->` markers the lead must fill from
+`orchestrator/state/*.json` (per SCHEMA.md). Distinct keys used → source field:
+
+- `attack.economics.{pool_balance_before,donation,deposit,minted_usd,attacker_net_usd,bad_debt_usd,profit_condition}`
+  → attack_result.json patterns[adapter_donation].economics.{...} (rational params).
+- `attack.irrational.{donation,deposit,attacker_net_usd}`
+  → attack_result.json patterns[adapter_donation].irrational_reference.{...}.
+- `bypass_v1.n_bypassed`, `bypass_v2.n_bypassed`, `bypass_v2.n_blocked` → bypass_report.json {v1,v2}.{n_bypassed,n_blocked}.
+- `validation_v1.threshold_bps` → validation.json v1.threshold_bps (this marker sits next to prose that calls v1 VACUOUS — keep that).
+- `validation_v2.{max_observed_bps,threshold_bps,false_positives,applicable_traces_checked}` → validation.json v2.{...}.
+- `guard_v2.{gas_plain_deposit,gas_guarded_deposit,gas_overhead,gas_overhead_pct}` → guard_report.json v2.{...}.
+
+Notes for the fill: (1) Vuln B must stay a depositor-loss finding (attacker profit $0) — do NOT wire it to an
+attack-impact marker. (2) If `bypass_v1.n_bypassed` resolves to 4, the README/PITCH prose already enumerates the
+4 named bypasses; if the executed count differs, ping Agent F to reconcile the enumerated list. (3) Advisory
+JSON can now carry optional `economics`, `guard_history` ({v1,v2}), `residual_risks`, and extended
+`governance_path` ({immediate_mitigation,permanent_fix,root_cause_fix}) fields — generate_advisory.py renders
+them if present and skips gracefully if absent. No files outside Agent F's ownership were modified.
+
+## Phase 1 — Agent D (validation honesty) + Agent F (docs) [executed/committed]
+- **D:** TOLERANCE_BPS resolved. EVM ground truth (test/ValidationV2.t.sol, 40 varied benign deposits incl. dust): max conversion-ratio deviation = **0 bps, 0 false positives**. Corpus SIM shows up to 1240 bps (p99 1176) but that is a coarse share-rounding artifact NOT reproduced on the EVM — this resolves the F6 contradiction. TOLERANCE_BPS kept at **100** (safe absolute margin over EVM rounding; not a fit to the sim). v1 validation labelled VACUOUS_FOR_RATE_DELTAS. validation.json written per-version.
+- **F (subagent):** README (Mocks-vs-reality §, v1→v2 reframe, limitations), idea.md/implementation.md claim deletions/softening, advisories/generate_advisory.py templates (economics/history/residual/governance), PITCH_NOTES.md, advisories/CLAIMS_AUDIT.md. 34 NUM markers (22 keys), 0 hardcoded pipeline numbers in docs; 5 verified / 5 softened / 8 deleted claims. Filed a Phase-4 NUM fill map.
+
+### Decision — TOLERANCE_BPS = 100 (unchanged)
+EVM benign deviation is 0, so the provisional 100 bps in AccountManagerV2/SetupV2 is correct; no constructor change needed. Documented that the root-cause formula fix would allow ~0 tolerance and remove the tolerance-riding residual.

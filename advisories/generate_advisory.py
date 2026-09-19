@@ -134,6 +134,45 @@ def render_markdown(finding: Dict[str, Any]) -> str:
     lines.append(finding.get("exploit_summary", "_No summary provided._"))
     lines.append("")
 
+    # 1a. Economics (rendered only when the pipeline supplied an economics block)
+    econ = finding.get("economics") or {}
+    if econ:
+        lines.append("## Economics")
+        lines.append("")
+        lines.append("| Parameter | Value |")
+        lines.append("| --- | --- |")
+        if "pool_balance_before" in econ:
+            lines.append(f"| Pool balance before | {_fmt_num(econ.get('pool_balance_before'))} |")
+        if "donation" in econ:
+            lines.append(f"| Donation | {_fmt_num(econ.get('donation'))} |")
+        if "deposit" in econ:
+            lines.append(f"| Deposit | {_fmt_num(econ.get('deposit'))} |")
+        if "minted_usd" in econ:
+            lines.append(f"| rwaUSD minted | {_fmt_usd(econ.get('minted_usd'))} |")
+        if "attacker_cost_usd" in econ:
+            lines.append(f"| Attacker cost | {_fmt_usd(econ.get('attacker_cost_usd'))} |")
+        if "attacker_net_usd" in econ:
+            lines.append(f"| Attacker net | {_fmt_usd(econ.get('attacker_net_usd'))} |")
+        if "roi" in econ:
+            lines.append(f"| ROI | {_fmt_num(econ.get('roi'))} |")
+        if "bad_debt_usd" in econ:
+            lines.append(f"| Protocol bad debt | {_fmt_usd(econ.get('bad_debt_usd'))} |")
+        if "profitable" in econ:
+            lines.append(f"| Profitable for attacker | {_bool_badge(econ.get('profitable'))} |")
+        lines.append("")
+        if econ.get("profit_condition"):
+            lines.append(f"**Profit condition:** {econ.get('profit_condition')}")
+            lines.append("")
+        irr = econ.get("irrational_reference") or {}
+        if irr:
+            lines.append(
+                "_Honesty note — the naive PoC is irrational:_ donation "
+                f"{_fmt_num(irr.get('donation'))}, deposit {_fmt_num(irr.get('deposit'))} "
+                f"nets the attacker {_fmt_usd(irr.get('attacker_net_usd'))} (a loss). "
+                "The figures above use rational parameters."
+            )
+            lines.append("")
+
     # 2. Reproducible PoC
     lines.append("## 2. Reproducible Proof-of-Concept")
     lines.append("")
@@ -201,6 +240,44 @@ def render_markdown(finding: Dict[str, Any]) -> str:
         lines.append(f"| `{method}` | {result} | {detail} |")
     lines.append("")
 
+    # 5a. Guard History (v1 -> v2) -- rendered only when supplied
+    history = finding.get("guard_history") or {}
+    if history:
+        lines.append("## Guard History (v1 -> v2)")
+        lines.append("")
+        lines.append("| Version | Guard class | Scope | Re-attack reverts | Bypasses | Note |")
+        lines.append("| --- | --- | --- | --- | --- | --- |")
+        # Accept either an ordered list or a {v1:..., v2:...} mapping.
+        if isinstance(history, dict):
+            items = [history[k] for k in sorted(history.keys()) if isinstance(history[k], dict)]
+        else:
+            items = [h for h in history if isinstance(h, dict)]
+        for h in items:
+            ver = str(h.get("version", "N/A"))
+            gclass = str(h.get("guard_class", "N/A")).replace("|", "\\|")
+            scope = str(h.get("scope", "N/A"))
+            rev = _bool_badge(h.get("reattack_reverts"))
+            nby = _fmt_num(h.get("n_bypassed", "N/A"))
+            note = str(h.get("note", "")).replace("|", "\\|")
+            lines.append(f"| {ver} | `{gclass}` | {scope} | {rev} | {nby} | {note} |")
+        lines.append("")
+
+    # 5b. Residual Risks -- rendered only when supplied
+    residuals = finding.get("residual_risks") or []
+    if residuals:
+        lines.append("## Residual Risks")
+        lines.append("")
+        for r in residuals:
+            if isinstance(r, dict):
+                name = r.get("name", "risk")
+                mx = r.get("max_extractable_usd")
+                note = r.get("note", "")
+                mx_str = f" (max extractable: {_fmt_usd(mx)})" if mx is not None else ""
+                lines.append(f"- **{name}**{mx_str}: {note}")
+            else:
+                lines.append(f"- {r}")
+        lines.append("")
+
     # 6. Recommended Actions
     lines.append("## 6. Recommended Actions")
     lines.append("")
@@ -211,13 +288,31 @@ def render_markdown(finding: Dict[str, Any]) -> str:
         lines.append(f"- **{prio}:** {act.get('action', '')}{gov_str}")
     lines.append("")
 
-    # 7. Governance Path
+    # 7. Governance Path (matches Multipli's emergency-role / timelock model)
     gp = finding.get("governance_path", {}) or {}
     lines.append("## 7. Governance Path")
     lines.append("")
     lines.append(f"- **Emergency-role compatible:** {_bool_badge(gp.get('emergency_role_compatible'))}")
     lines.append(f"- **Timelock required:** {_bool_badge(gp.get('timelock_required'))}")
     lines.append(f"- **Full vote required for:** {gp.get('full_vote_required_for', 'N/A')}")
+    # Immediate mitigation = tighten-only via the emergency role (no timelock).
+    imm = gp.get("immediate_mitigation") or (
+        "Emergency role, tighten-only: switch to a conservative pause profile and "
+        "cut the mint cap. No parameter is loosened, so no timelock is required."
+    )
+    lines.append(f"- **Immediate mitigation (emergency role, tighten-only):** {imm}")
+    # Permanent fix = code change through the governance timelock.
+    perm = gp.get("permanent_fix") or (
+        "Deploy the guard as a code change through the standard governance timelock."
+    )
+    lines.append(f"- **Permanent fix (governance timelock):** {perm}")
+    # Root-cause recommendation: fix the valuation formula alongside the guard.
+    root = gp.get("root_cause_fix") or (
+        "Recommended alongside the guard: fix the valuation formula itself so credited "
+        "value is computed as shares x price-per-share (or tokensIn x independent unit price), "
+        "removing dependence on the manipulable pool-derived rate."
+    )
+    lines.append(f"- **Root-cause fix (recommended):** {root}")
     lines.append("")
 
     # 8. Footer / provenance
@@ -478,6 +573,56 @@ def render_pdf(finding: Dict[str, Any], pdf_path: str) -> str:
     story.append(_para(finding.get("exploit_summary", "No summary provided."),
                        styles["body"]))
 
+    # --- 1a. Economics (only when supplied) -----------------------------
+    econ = finding.get("economics") or {}
+    if econ:
+        story.append(_para("Economics", styles["h2"]))
+        econ_rows: List[Any] = []
+        _maybe = [
+            ("Pool balance before", "pool_balance_before", _fmt_num),
+            ("Donation", "donation", _fmt_num),
+            ("Deposit", "deposit", _fmt_num),
+            ("rwaUSD minted", "minted_usd", _fmt_usd),
+            ("Attacker cost", "attacker_cost_usd", _fmt_usd),
+            ("Attacker net", "attacker_net_usd", _fmt_usd),
+            ("ROI", "roi", _fmt_num),
+            ("Protocol bad debt", "bad_debt_usd", _fmt_usd),
+        ]
+        for label, key, fmt in _maybe:
+            if key in econ:
+                econ_rows.append((label, fmt(econ.get(key))))
+        if "profitable" in econ:
+            econ_rows.append(("Profitable for attacker", _bool_badge(econ.get("profitable"))))
+        if econ_rows:
+            edata = [[_para(k, styles["cell_bold"]), _para(v, styles["cell"])]
+                     for k, v in econ_rows]
+            etable = Table(edata, colWidths=[2.6 * inch, 3.7 * inch])
+            etable.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#EBF0F3")),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#D5DBDB")),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ("LEFTPADDING", (0, 0), (-1, -1), 6),
+            ]))
+            story.append(etable)
+        if econ.get("profit_condition"):
+            story.append(Spacer(1, 2))
+            story.append(Paragraph(
+                f'<b>Profit condition:</b> {_html.escape(str(econ.get("profit_condition")))}',
+                styles["body"],
+            ))
+        irr = econ.get("irrational_reference") or {}
+        if irr:
+            story.append(Paragraph(
+                "<i>Honesty note - the naive PoC is irrational:</i> donation "
+                f"{_html.escape(_fmt_num(irr.get('donation')))}, deposit "
+                f"{_html.escape(_fmt_num(irr.get('deposit')))} nets the attacker "
+                f"{_html.escape(_fmt_usd(irr.get('attacker_net_usd')))} (a loss). "
+                "The figures above use rational parameters.",
+                styles["body"],
+            ))
+
     # --- 2. Reproducible PoC --------------------------------------------
     story.append(_para("2. Reproducible Proof-of-Concept", styles["h2"]))
     story.append(_code_flowable(finding.get("poc_solidity", "// no PoC provided"),
@@ -520,6 +665,64 @@ def render_pdf(finding: Dict[str, Any], pdf_path: str) -> str:
     story.append(Spacer(1, 2))
     story.append(_bypass_table(br, styles))
 
+    # --- 5a. Guard History (v1 -> v2), only when supplied ---------------
+    history = finding.get("guard_history") or {}
+    if history:
+        story.append(_para("Guard History (v1 -> v2)", styles["h2"]))
+        if isinstance(history, dict):
+            items = [history[k] for k in sorted(history.keys()) if isinstance(history[k], dict)]
+        else:
+            items = [h for h in history if isinstance(h, dict)]
+        hheader = [
+            Paragraph('<font color="white"><b>Version</b></font>', styles["cell"]),
+            Paragraph('<font color="white"><b>Guard class</b></font>', styles["cell"]),
+            Paragraph('<font color="white"><b>Scope</b></font>', styles["cell"]),
+            Paragraph('<font color="white"><b>Reverts</b></font>', styles["cell"]),
+            Paragraph('<font color="white"><b>Bypasses</b></font>', styles["cell"]),
+        ]
+        hdata = [hheader]
+        for h in items:
+            hdata.append([
+                _para(h.get("version", "N/A"), styles["cell"]),
+                _para(h.get("guard_class", "N/A"), styles["cell"]),
+                _para(h.get("scope", "N/A"), styles["cell"]),
+                _para(_bool_badge(h.get("reattack_reverts")), styles["cell"]),
+                _para(_fmt_num(h.get("n_bypassed", "N/A")), styles["cell"]),
+            ])
+        htable = Table(hdata, colWidths=[0.8 * inch, 2.5 * inch, 1.2 * inch,
+                                         0.9 * inch, 0.9 * inch])
+        htable.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), _ACCENT),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#D5DBDB")),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1),
+             [colors.white, colors.HexColor("#F4F6F7")]),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+        ]))
+        story.append(htable)
+        for h in items:
+            if h.get("note"):
+                story.append(Paragraph(
+                    f'<b>{_html.escape(str(h.get("version", "")))}:</b> '
+                    f'{_html.escape(str(h.get("note")))}', styles["body"]))
+
+    # --- 5b. Residual Risks, only when supplied -------------------------
+    residuals = finding.get("residual_risks") or []
+    if residuals:
+        story.append(_para("Residual Risks", styles["h2"]))
+        for r in residuals:
+            if isinstance(r, dict):
+                name = _html.escape(str(r.get("name", "risk")))
+                note = _html.escape(str(r.get("note", "")))
+                mx = r.get("max_extractable_usd")
+                mx_str = (f" <font color='#5D6D7E'>(max extractable: "
+                          f"{_html.escape(_fmt_usd(mx))})</font>") if mx is not None else ""
+                story.append(Paragraph(f"&bull; <b>{name}</b>{mx_str}: {note}", styles["body"]))
+            else:
+                story.append(Paragraph(f"&bull; {_html.escape(str(r))}", styles["body"]))
+
     # --- 6. Recommended Actions -----------------------------------------
     story.append(_para("6. Recommended Actions", styles["h2"]))
     for act in finding.get("recommended_actions", []) or []:
@@ -533,10 +736,25 @@ def render_pdf(finding: Dict[str, Any], pdf_path: str) -> str:
     # --- 7. Governance Path ---------------------------------------------
     gp = finding.get("governance_path", {}) or {}
     story.append(_para("7. Governance Path", styles["h2"]))
+    _imm = gp.get("immediate_mitigation") or (
+        "Emergency role, tighten-only: conservative pause profile + cut mint cap. "
+        "Nothing loosened, so no timelock required."
+    )
+    _perm = gp.get("permanent_fix") or (
+        "Deploy the guard as a code change through the standard governance timelock."
+    )
+    _root = gp.get("root_cause_fix") or (
+        "Recommended alongside the guard: fix the valuation formula so credited value is "
+        "shares x price-per-share (or tokensIn x independent unit price), removing the "
+        "dependence on the manipulable pool-derived rate."
+    )
     gov_rows = [
         ("Emergency-role compatible", _bool_badge(gp.get("emergency_role_compatible"))),
         ("Timelock required", _bool_badge(gp.get("timelock_required"))),
         ("Full vote required for", str(gp.get("full_vote_required_for", "N/A"))),
+        ("Immediate mitigation (tighten-only)", str(_imm)),
+        ("Permanent fix (timelock)", str(_perm)),
+        ("Root-cause fix (recommended)", str(_root)),
     ]
     gdata = [[_para(k, styles["cell_bold"]), _para(v, styles["cell"])]
              for k, v in gov_rows]

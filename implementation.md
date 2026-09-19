@@ -110,7 +110,7 @@ yaml
   ...
 
 - name: cross_chain_supply_inflation
-  reference_incident: "KelpDAO, April 2026, $292M loss"
+  reference_incident: "KelpDAO cross-chain release, 2026, ~$290M loss"
   ...
 
 Playbook is version-controlled, extensible, and gives the agent structured guidance instead of vague prompts.
@@ -242,7 +242,7 @@ End of Phase 2: Agent that reliably discovers all three seeded vulnerabilities b
 
 PHASE 3: Invariant Synthesis, Validation & Advisory Generation
 
-The core novel contribution. RWA-specific invariant classes, honest empirical validation, bypass analysis, and actionable advisories.
+Our core contribution. RWA-specific invariant classes, honest empirical validation, bypass analysis, and actionable advisories.
 
 3.1 RWA Invariant Class Library
 
@@ -570,7 +570,7 @@ Screenshot deck as ultimate fallback
 4.5 Pitch Deck & Responses
 
 Slide 1: The Problem (30 sec)
-"$1B lost in H1 2026. RWA protocols lost $200M+ specifically to configuration and adapter errors, not code bugs. Existing security tools target generic DeFi. Nobody targets RWA."
+"Over a billion dollars lost to crypto exploits in H1 2026 (a record half-year). A large share of the RWA-collateral losses came from configuration and adapter errors, not classic code bugs. General-purpose security tools target generic DeFi; targeting RWA-specific failure modes is our contribution."
 
 Slide 2: What Red Queen Is (30 sec)
 "Continuous security advisor for RWA protocols. Attack agent + invariant synthesizer + advisory pipeline. Purpose-built for RWA failure modes."
@@ -596,7 +596,7 @@ Slide 6: Multipli Application (30 sec)
 Memorize these for Q&A:
 
 Gap 1 — "The agent won't find novel exploits"
-"Correct, and we don't claim it will. We follow the A1 architecture with an RWA-specific playbook. The agent systematically tests known RWA failure modes against target contracts, which is what a security auditor does. Novelty is in the playbook and invariant classes, not the agent."
+"Correct, and we don't claim it will. We follow the A1 architecture with an RWA-specific playbook. The agent systematically tests known RWA failure modes against target contracts, which is what a security auditor does. Our contribution is in the playbook and invariant classes, not the agent."
 
 Gap 2 — "Your 'zero false positive proof' is empirical, not formal"
 "You're right. We call it empirical validation, not mathematical proof. Each advisory reports max observed value, threshold margin, and coverage warnings. For production deployment, we recommend additional headroom and human review of flagged coverage gaps."
