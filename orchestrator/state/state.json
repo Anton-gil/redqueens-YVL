@@ -1,6 +1,95 @@
 {
   "status": "hardened",
   "headline": "EXPLOIT FOUND: adapter donation nets +$90,000,000 (rational params) on the vulnerable target",
+  "target_contracts": [
+    "src/GoldAdapter.sol",
+    "src/AccountManager.sol (v1)",
+    "src/remediated/AccountManagerV2.sol (v2)"
+  ],
+  "advisories_generated": 2,
+  "coverage_warnings_flagged": 1,
+  "attacker": {
+    "pattern_name": "adapter_donation (rational: donate 50% pool, deposit 10x pool)",
+    "progress": {
+      "current": 1,
+      "total": 1
+    },
+    "log": [
+      "donation inflates GoldAdapter.exchangeRate (pool balance / shares)",
+      "deposit>pool => minted $300,000,000, attacker net +$90,000,000"
+    ],
+    "tool_calls": [
+      {
+        "name": "fork_and_execute",
+        "args": "donation PoC",
+        "result": "EXPLOIT_CONFIRMED (v1)"
+      }
+    ],
+    "poc_code": "// see test/ExploitVulnA.t.sol (rational params, net>0 asserted)",
+    "result": {
+      "found": true,
+      "profit_usd": 90000000
+    }
+  },
+  "defender": {
+    "candidate_invariant": {
+      "name": "AdapterConversionIntegrity (anchored to raw usdFeed)",
+      "solidity": "require(value*10000 <= tokensIn*usdFeed/1e18*(10000+TOLERANCE_BPS)); // AccountManagerV2._creditPrincipal"
+    },
+    "validation": {
+      "checked": 40,
+      "total": 40,
+      "violations": 0
+    },
+    "threshold": {
+      "max_observed_pct": 0.0,
+      "threshold_pct": 1.0,
+      "margin_ratio": "n/a (EVM benign 0)"
+    },
+    "bypass_results": [
+      {
+        "method": "split_into_10_subtransactions",
+        "success": false,
+        "reason": "BLOCKED"
+      },
+      {
+        "method": "spread_across_20_blocks",
+        "success": false,
+        "reason": "BLOCKED"
+      },
+      {
+        "method": "multicall_path",
+        "success": false,
+        "reason": "BLOCKED"
+      },
+      {
+        "method": "first_in_block_atomic",
+        "success": false,
+        "reason": "BLOCKED"
+      },
+      {
+        "method": "direct_call_around_guard",
+        "success": false,
+        "reason": "BLOCKED"
+      },
+      {
+        "method": "rational_economics",
+        "success": false,
+        "reason": "BLOCKED"
+      },
+      {
+        "method": "tolerance_riding",
+        "success": false,
+        "reason": "RESIDUAL"
+      },
+      {
+        "method": "unguarded_call_site_scan",
+        "success": false,
+        "reason": "BLOCKED"
+      }
+    ],
+    "guard_deployed": true
+  },
   "iterations": [
     {
       "version": "v1",
@@ -39,10 +128,10 @@
     },
     {
       "version": "v2",
-      "guard_class": "AdapterConversionIntegrity (anchored to raw usdFeed)",
-      "scope": "value-crediting chokepoint (all paths)",
+      "guard_class": "AdapterConversionIntegrity (anchored)",
+      "scope": "chokepoint (all paths)",
       "threshold_basis": "EVM benign 0 bps; TOLERANCE_BPS=100",
-      "validation_summary": "0 false positives on EVM (40 deposits)",
+      "validation_summary": "0 false positives (40 deposits)",
       "n_bypassed": 0,
       "n_blocked": 7,
       "strategies": [
@@ -269,5 +358,5 @@
     "depositor_loss_usd": 950000,
     "attacker_profit_usd": 0
   },
-  "ts": 1789850864.914219
+  "ts": 1789850995.657094
 }
