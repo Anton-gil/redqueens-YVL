@@ -1,32 +1,127 @@
 {
-  "guard": "ExchangeRateDeltaBound_564B49",
-  "threshold_bps": 1590,
-  "window_blocks": 1,
-  "forge_ok": true,
-  "attempts": [
-    {
-      "method": "split_into_10_subtransactions",
-      "success": false,
-      "reason": "per-block checkpoint catches the cumulative rate spike"
-    },
-    {
-      "method": "spread_across_20_blocks",
-      "success": true,
-      "reason": "a 1-block window re-checkpoints at the already-inflated rate; the donation in a prior block is not seen as movement during the deposit",
-      "mitigation_required": "widen window_blocks to span plausible donation-to-use gaps, or checkpoint on any pool-balance change"
-    },
-    {
-      "method": "use_multicall_path",
-      "success": true,
-      "reason": "AccountManager.depositAndMint() is not behind the deposit()-scoped guard",
-      "mitigation_required": "add the invariant at the AccountManager.depositAndMint() multicall boundary"
-    },
-    {
-      "method": "gas_variance",
-      "success": false,
-      "reason": "guard is state-based, not gas-based; N/A"
-    }
-  ],
-  "n_bypassed": 2,
-  "resistance_score": "MEDIUM - requires layered defense"
+  "v1": {
+    "version": "v1",
+    "strategies": [
+      {
+        "name": "split_into_10_subtransactions",
+        "verdict": "BLOCKED",
+        "evidence_test": "test/bypass/BypassV1.t.sol",
+        "reason": "reverted (guard or access control)",
+        "mitigation": "anchor to an independent reference"
+      },
+      {
+        "name": "spread_across_20_blocks",
+        "verdict": "BYPASSED",
+        "evidence_test": "test/bypass/BypassV1.t.sol",
+        "reason": "attack credited/minted > fair*(1+tol), no revert",
+        "mitigation": "anchor to an independent reference; a windowed self-delta is defeatable"
+      },
+      {
+        "name": "multicall_path",
+        "verdict": "BYPASSED",
+        "evidence_test": "test/bypass/BypassV1.t.sol",
+        "reason": "attack credited/minted > fair*(1+tol), no revert",
+        "mitigation": "enforce the invariant at the value-crediting chokepoint, not per entry point"
+      },
+      {
+        "name": "first_in_block_atomic",
+        "verdict": "BYPASSED",
+        "evidence_test": "test/bypass/BypassV1.t.sol",
+        "reason": "attack credited/minted > fair*(1+tol), no revert",
+        "mitigation": "anchor to an independent reference, not a per-block self-checkpoint"
+      },
+      {
+        "name": "direct_call_around_guard",
+        "verdict": "BYPASSED",
+        "evidence_test": "test/bypass/BypassV1.t.sol",
+        "reason": "attack credited/minted > fair*(1+tol), no revert",
+        "mitigation": "move enforcement into the protocol (chokepoint), not an opt-in wrapper"
+      },
+      {
+        "name": "rational_economics",
+        "verdict": "BYPASSED",
+        "evidence_test": "test/bypass/BypassV1.t.sol",
+        "reason": "attack credited/minted > fair*(1+tol), no revert",
+        "mitigation": "anchor credited value to raw feed so deposit>pool cannot over-credit"
+      }
+    ],
+    "n_bypassed": 5,
+    "n_blocked": 1,
+    "n_error": 0,
+    "residual_risks": [],
+    "gas_variance": "NOT_APPLICABLE (guard is state-based, not gas-based; excluded from counts)"
+  },
+  "v2": {
+    "version": "v2",
+    "strategies": [
+      {
+        "name": "split_into_10_subtransactions",
+        "verdict": "BLOCKED",
+        "evidence_test": "test/bypass/BypassV2.t.sol",
+        "reason": "reverted (guard or access control)",
+        "mitigation": "anchor to an independent reference"
+      },
+      {
+        "name": "spread_across_20_blocks",
+        "verdict": "BLOCKED",
+        "evidence_test": "test/bypass/BypassV2.t.sol",
+        "reason": "reverted (guard or access control)",
+        "mitigation": "anchor to an independent reference; a windowed self-delta is defeatable"
+      },
+      {
+        "name": "multicall_path",
+        "verdict": "BLOCKED",
+        "evidence_test": "test/bypass/BypassV2.t.sol",
+        "reason": "reverted (guard or access control)",
+        "mitigation": "enforce the invariant at the value-crediting chokepoint, not per entry point"
+      },
+      {
+        "name": "first_in_block_atomic",
+        "verdict": "BLOCKED",
+        "evidence_test": "test/bypass/BypassV2.t.sol",
+        "reason": "reverted (guard or access control)",
+        "mitigation": "anchor to an independent reference, not a per-block self-checkpoint"
+      },
+      {
+        "name": "direct_call_around_guard",
+        "verdict": "BLOCKED",
+        "evidence_test": "test/bypass/BypassV2.t.sol",
+        "reason": "reverted (guard or access control)",
+        "mitigation": "move enforcement into the protocol (chokepoint), not an opt-in wrapper"
+      },
+      {
+        "name": "rational_economics",
+        "verdict": "BLOCKED",
+        "evidence_test": "test/bypass/BypassV2.t.sol",
+        "reason": "reverted (guard or access control)",
+        "mitigation": "anchor credited value to raw feed so deposit>pool cannot over-credit"
+      },
+      {
+        "name": "tolerance_riding",
+        "verdict": "RESIDUAL",
+        "evidence_test": "test/bypass/BypassV2.t.sol",
+        "reason": "no verdict logged",
+        "mitigation": "tighten TOLERANCE_BPS / anchor to TWAP / adopt the root-cause valuation formula",
+        "max_extractable_usd": 20000000.0
+      },
+      {
+        "name": "unguarded_call_site_scan",
+        "verdict": "BLOCKED",
+        "reason": "ledger.increasePrincipal appears 1 time(s); both credit paths route through _creditPrincipal=True",
+        "evidence_test": "static parse of src/remediated/AccountManagerV2.sol"
+      }
+    ],
+    "n_bypassed": 0,
+    "n_blocked": 7,
+    "n_error": 0,
+    "residual_risks": [
+      {
+        "name": "tolerance_riding",
+        "max_extractable_usd": 20000000.0,
+        "note": "donation kept under TOLERANCE_BPS + deposit >> pool extracts ~tolerance of deposit value"
+      }
+    ],
+    "gas_variance": "NOT_APPLICABLE (guard is state-based, not gas-based; excluded from counts)"
+  },
+  "ts": 1789850253.1515524
 }
