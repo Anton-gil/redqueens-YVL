@@ -78,6 +78,24 @@ ATTACK_MODEL = os.environ.get("RED_QUEEN_ATTACK_MODEL", "claude-sonnet-5")
 # and costs a fraction of the larger models. Override with RED_QUEEN_OPENAI_MODEL if needed.
 OPENAI_MODEL = os.environ.get("RED_QUEEN_OPENAI_MODEL", "gpt-4o-mini")
 
+# --- Autonomous agent (OpenAI client -> Hugging Face router -> DeepSeek-R1 via Novita) ---
+# A separate, open-ended attack agent (agent/hf_agent.py): given the full target context and all six
+# tools, it drives its own recon -> hypothesis -> PoC -> exploit loop rather than following the
+# per-pattern playbook. Uses the OpenAI SDK against HF's OpenAI-compatible router.
+HF_TOKEN = os.environ.get("HF_TOKEN", "") or os.environ.get("HUGGINGFACE_API_KEY", "")
+HF_BASE_URL = os.environ.get("HF_BASE_URL", "https://router.huggingface.co/v1")
+HF_MODEL = os.environ.get("HF_MODEL", "deepseek-ai/DeepSeek-R1:novita")
+# DeepSeek-R1 (a reasoning model) does native OpenAI tool-calling unreliably on Novita - it degrades
+# to emitting tool calls as free text - so the default is a strict JSON text-protocol, which R1 drives
+# reliably. Set RED_QUEEN_HF_MODE=native to force the OpenAI function-calling path instead.
+HF_TOOL_MODE = os.environ.get("RED_QUEEN_HF_MODE", "text")
+MAX_AUTONOMOUS_ITERATIONS = int(os.environ.get("RED_QUEEN_MAX_ITERS", "24"))
+AUTONOMOUS_RUN_TIMEOUT_SECONDS = int(os.environ.get("RED_QUEEN_AUTON_TIMEOUT", "1200"))
+
+
+def has_hf():
+    return bool(HF_TOKEN)
+
 # Rough per-token USD prices for the budget guard (input, output). Deliberately conservative;
 # the guard is a runaway-bill kill switch, not accounting.
 MODEL_PRICE_PER_MTOK = {
