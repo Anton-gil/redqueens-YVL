@@ -64,8 +64,11 @@ fi
 
 # --- 2. Run the deploy script ---
 echo "[deploy] running forge script ..."
+# --slow sends txs one at a time (waits for each receipt), avoiding the anvil/forge
+# "nonce too low" race that can occur when many txs are broadcast back-to-back.
 forge script scripts/Deploy.s.sol \
     --broadcast \
+    --slow \
     --rpc-url "$RPC_URL" \
     --private-key "$DEPLOYER_KEY" \
     2>&1 | tee "$FORGE_LOG"
