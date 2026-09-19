@@ -1,38 +1,32 @@
 #!/usr/bin/env bash
-# Red Queen — one-command live demo.
-#
-# Starts the local web server AND the paced attack->defend loop together, so the frontend actually
-# ANIMATES. (Opening frontend/index.html directly as a file:// URL will NOT animate — the browser
-# blocks its fetch of state.json and it falls back to a static sample. You must use the http URL
-# below while this script is running.)
-#
-# Usage:
-#   bash demo.sh            # refresh real data, then run the live demo once
-#   bash demo.sh 3 1.2      # 3 loops, 1.2s per beat
-set -euo pipefail
+# Red Queen end-to-end demo — deterministic, offline, NO API keys. Runs in well under 3 minutes.
+set -e
+export PATH="$PATH:$HOME/.foundry/bin:/home/anton/.foundry/bin"
 cd "$(dirname "$0")"
-export PATH="$PATH:$HOME/.foundry/bin"
 
-PORT=8799
+echo "=================================================================="
+echo " Red Queen — attack -> synthesize -> validate -> bypass -> advise"
+echo "=================================================================="
 
-# clean any previous server on this port
-pkill -f "orchestrator.server $PORT" 2>/dev/null || true
-pkill -f "http.server $PORT" 2>/dev/null || true
-sleep 1
+echo; echo "[1/3] PROOFS: forge test (contracts, exploits, v2 guard, bypass suites, validation)"
+forge test
 
-# make sure there is real data to animate on the first START click
-if [ ! -f orchestrator/state/state.json ]; then
-  echo "[demo] priming real pipeline data (one-time) ..."
-  python3 -m orchestrator.loop --pace 0.01 >/dev/null 2>&1 || true
-fi
+echo; echo "[2/3] BYPASS ANALYSIS (verdicts from executed forge; v1 vs v2)"
+python3 -m synthesis.bypass
 
-echo ""
-echo "======================================================================"
-echo "  OPEN THIS IN YOUR BROWSER:"
-echo "    http://127.0.0.1:$PORT/frontend/index.html"
-echo "  Then pick a TARGET and click  > START ATTACK  in the page."
-echo "  (leave this terminal running; Ctrl+C to stop)"
-echo "======================================================================"
-echo ""
+echo; echo "[3/3] ITERATION SUMMARY (from orchestrator/state/state.json)"
+python3 - <<'PY'
+import json
+s = json.load(open("orchestrator/state/state.json"))
+print("  headline:", s.get("headline"))
+for it in s["iterations"]:
+    print("  %-3s | %-40s | scope=%-28s | bypassed=%d blocked=%d"
+          % (it["version"], it["guard_class"], it["scope"], it["n_bypassed"], it["n_blocked"]))
+e = s["economics"]
+print("  attacker net (rational): $%s | bad debt: $%s | condition: %s"
+      % (f"{int(e['attacker_net_usd']):,}", f"{int(e['bad_debt_usd']):,}", e["profit_condition"]))
+print("  Vuln B:", s["vuln_b"]["classification"], "depositor_loss $%s, attacker_profit $%d"
+      % (f"{int(s['vuln_b']['depositor_loss_usd']):,}", s["vuln_b"]["attacker_profit_usd"]))
+PY
 
-exec python3 -m orchestrator.server "$PORT"
+echo; echo "Done. Open frontend/index.html in a browser (it polls orchestrator/state/state.json)."

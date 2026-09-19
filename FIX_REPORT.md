@@ -66,3 +66,14 @@ them if present and skips gracefully if absent. No files outside Agent F's owner
 
 ### Decision — TOLERANCE_BPS = 100 (unchanged)
 EVM benign deviation is 0, so the provisional 100 bps in AccountManagerV2/SetupV2 is correct; no constructor change needed. Documented that the root-cause formula fix would allow ~0 tolerance and remove the tolerance-riding residual.
+
+## Phase 2/4 — Integration + verification (lead, executed)
+- **Full `forge test`: 31 passed, 0 failed, 1 skipped** (fork test needs RPC). All A/B/C/D suites green together.
+- `git diff main -- src/*.sol` (top-level vulnerable contracts): **EMPTY** — only `src/remediated/AccountManagerV2.sol` is new. Deliberately-vulnerable src untouched.
+- Stale-metric grep: only remaining hits are the v1 VACUOUS threshold (`1590` bps / `15.9%`) cited to DEBUNK it (README §results, PITCH Q7) — explained, matches validation.json v1.threshold_bps. No stale headline numbers.
+- "first/novel/nobody" grep: all hits are sequence-"first" (v1→v2), honesty DISCLAIMERS ("not novel, not claimed"), gap-response quotes, or CLAIMS_AUDIT documenting deletions. No superiority claims remain.
+- NUM markers: all filled from state (0 unfilled). state.json carries real attacker($90M)/defender(0 violations, guard deployed) blocks + iterations[] (v1: 5 bypassed → v2: 0).
+- `demo.sh`: deterministic offline demo (forge test → synthesis.bypass → state summary), no API keys.
+
+### Agent E — scope note
+state.json is frontend-compatible (real attacker/defender blocks) so the existing verified frontend renders TRUE numbers, plus a new `iterations[]` block for the v1→v2 story. A dedicated iterations-table UI in frontend/index.html is a remaining enhancement (data is present in state); the full iterative orchestrator/loop.py rewrite was not done (correctness-first prioritization near deadline).
