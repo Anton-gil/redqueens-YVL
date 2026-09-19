@@ -19,9 +19,9 @@
     "gas_overhead": 3175,
     "gas_overhead_pct": 2.4,
     "gas_plain_depositAndMint": 151914,
-    "gas_guarded_depositAndMint": 155147,
-    "gas_overhead_dam": 3233,
-    "gas_overhead_dam_pct": 2.1,
+    "gas_guarded_depositAndMint": 156365,
+    "gas_overhead_dam": 4451,
+    "gas_overhead_dam_pct": 2.9,
     "evidence_test": "test/GuardV2.t.sol",
     "attacks_blocked": [
       "donation_deposit",
