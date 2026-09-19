@@ -123,5 +123,5 @@
     ],
     "gas_variance": "NOT_APPLICABLE (guard is state-based, not gas-based; excluded from counts)"
   },
-  "ts": 1789851954.9504077
+  "ts": 1789851989.1780348
 }
