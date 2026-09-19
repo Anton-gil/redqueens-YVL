@@ -2,6 +2,7 @@
   "adapter_donation": {
     "exploit": "adapter_donation",
     "vuln_ref": "Vuln A",
+    "boundary": "deposit",
     "top_anomaly": {
       "variable": "GoldAdapter.exchangeRate",
       "exploit_delta": 230000,
@@ -123,6 +124,7 @@
   "stale_price_multicall": {
     "exploit": "stale_price_multicall",
     "vuln_ref": "Vuln C",
+    "boundary": "depositAndMint",
     "top_anomaly": {
       "variable": "GoldAdapter.exchangeRate",
       "exploit_delta": 230000,
@@ -211,21 +213,6 @@
     ],
     "safety_multiplier": 10,
     "primary_candidate": {
-      "class": "AdapterConversionIntegrity",
-      "name": "AdapterConversionIntegrity_564B49",
-      "params": {
-        "adapter": "0xa722bdA6968F50778B973Ae2701e90200C564B49",
-        "router": "0x976C214741b4657bd99DFD38a5c0E3ac5C99D903",
-        "tolerance_bps": 100
-      },
-      "threshold": {
-        "tolerance_bps": 100,
-        "exploit_deviation_bps": 230000,
-        "threshold_note": "recorded value must be within 1% of tokens_in * oracle price"
-      },
-      "description": "Ledger-recorded value must match tokens_in * oracle price within tolerance."
-    },
-    "alternative_candidate": {
       "class": "ExchangeRateDeltaBound",
       "name": "ExchangeRateDeltaBound_564B49",
       "params": {
@@ -239,6 +226,21 @@
         "threshold_note": "benign exchange-rate delta is 0 across the corpus; 100 bps is a policy floor, not a max-benign*safety fit"
       },
       "description": "Per-window exchange-rate delta must stay within max_delta_bps of the checkpoint."
+    },
+    "alternative_candidate": {
+      "class": "AdapterConversionIntegrity",
+      "name": "AdapterConversionIntegrity_564B49",
+      "params": {
+        "adapter": "0xa722bdA6968F50778B973Ae2701e90200C564B49",
+        "router": "0x976C214741b4657bd99DFD38a5c0E3ac5C99D903",
+        "tolerance_bps": 100
+      },
+      "threshold": {
+        "tolerance_bps": 100,
+        "exploit_deviation_bps": 230000,
+        "threshold_note": "recorded value must be within 1% of tokens_in * oracle price"
+      },
+      "description": "Ledger-recorded value must match tokens_in * oracle price within tolerance."
     }
   }
 }

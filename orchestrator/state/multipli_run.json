@@ -1,0 +1,166 @@
+{
+  "chain": "base",
+  "chain_id": 8453,
+  "rpc": "https://mainnet.base.org",
+  "address_source": "https://docs.multipli.fi/technical-architecture/rwausd-contract-addresses.md",
+  "targets": [
+    {
+      "address": "0x272Ec977f4575df41cD47b1b254954E1C7972789",
+      "label": "rwaUSD Token (Base)",
+      "deployed": true,
+      "bytecode_bytes": 176,
+      "verified": true,
+      "contract_name": "ERC1967Proxy",
+      "proxy_impl": "0xe1824bf952bb2e8414d12de8a9fc2cbc666d6758",
+      "impl_name": "rwaUSD",
+      "structural_flags": [],
+      "functions": [
+        "_implementation()",
+        "_unsafeAllowUninitialized()",
+        "_getRwaUsdStorage()",
+        "initialize(string memory name,\n        string memory symbol,\n        uint8 decimals_,\n        uint256 maxSupply_,\n        uint256 preMint,\n        address defaultAdmin,\n        address defaultUpgrader)",
+        "__RwaUsd_init(string memory name,\n        string memory symbol,\n        uint8 decimals_,\n        uint256 maxSupply_,\n        uint256 preMint,\n        address defaultAdmin,\n        address defaultUpgrader)",
+        "__RwaUsd_init_unchained(uint8 decimals_,\n        uint256 maxSupply_,\n        uint256 preMint,\n        address defaultAdmin,\n        address defaultUpgrader)",
+        "_authorizeUpgrade(address newImplementation)",
+        "supportsInterface(bytes4 interfaceId)",
+        "decimals()",
+        "maxSupply()",
+        "burn(uint256 amount)",
+        "burn(address account, uint256 amount)",
+        "burnFrom(address account, uint256 amount)",
+        "mint(address account, uint256 amount)",
+        "grantMintAndBurnRoles(address burnAndMinter)",
+        "getCCIPAdmin()",
+        "setCCIPAdmin(address newAdmin)",
+        "pause()",
+        "unpause()",
+        "_update(address from, address to, uint256 value)",
+        "_approve(address owner, address spender, uint256 value, bool emitEvent)"
+      ],
+      "impl_verified": true
+    },
+    {
+      "address": "0x7Dc0496016d88c3EbA6d54D1514F24B3C9872894",
+      "label": "CCIP BurnMintPool (Base)",
+      "deployed": true,
+      "bytecode_bytes": 16134,
+      "verified": true,
+      "contract_name": "BurnMintTokenPool",
+      "proxy_impl": null,
+      "impl_name": null,
+      "structural_flags": [],
+      "functions": [
+        "_argsToBytes(EVMExtraArgsV1 memory extraArgs)",
+        "_argsToBytes(GenericExtraArgsV2 memory extraArgs)",
+        "_svmArgsToBytes(SVMExtraArgsV1 memory extraArgs)",
+        "_add(Set storage set, bytes32 value)",
+        "_remove(Set storage set, bytes32 value)",
+        "_contains(Set storage set, bytes32 value)",
+        "_length(Set storage set)",
+        "_at(Set storage set, uint256 index)",
+        "_values(Set storage set)",
+        "add(Bytes32Set storage set, bytes32 value)",
+        "remove(Bytes32Set storage set, bytes32 value)",
+        "contains(Bytes32Set storage set, bytes32 value)",
+        "length(Bytes32Set storage set)",
+        "at(Bytes32Set storage set, uint256 index)",
+        "values(Bytes32Set storage set)",
+        "add(AddressSet storage set, address value)",
+        "remove(AddressSet storage set, address value)",
+        "contains(AddressSet storage set, address value)",
+        "length(AddressSet storage set)",
+        "at(AddressSet storage set, uint256 index)",
+        "values(AddressSet storage set)",
+        "add(UintSet storage set, uint256 value)",
+        "remove(UintSet storage set, uint256 value)",
+        "contains(UintSet storage set, uint256 value)",
+        "length(UintSet storage set)",
+        "at(UintSet storage set, uint256 index)",
+        "values(UintSet storage set)",
+        "supportsInterface(bytes4 interfaceId)",
+        "totalSupply()",
+        "balanceOf(address account)",
+        "transfer(address to, uint256 amount)",
+        "allowance(address owner, address spender)",
+        "approve(address spender, uint256 amount)",
+        "transferFrom(address from, address to, uint256 amount)",
+        "owner()",
+        "transferOwnership(address recipient)",
+        "acceptOwnership()",
+        "isBlessed(TaggedRoot calldata taggedRoot)",
+        "isCursed()",
+        "isCursed(bytes16 subject)",
+        "typeAndVersion()",
+        "_consume(TokenBucket storage s_bucket, uint256 requestTokens, address tokenAddress)",
+        "_currentTokenBucketState(TokenBucket memory bucket)",
+        "_setTokenBucketConfig(TokenBucket storage s_bucket, Config memory config)",
+        "_validateTokenBucketConfig(Config memory config)",
+        "_calculateRefill(uint256 capacity,\n    uint256 tokens,\n    uint256 timeDiff,\n    uint256 rate)",
+        "_min(uint256 a, uint256 b)",
+        "mint(address account, uint256 amount)",
+        "burn(uint256 amount)",
+        "burn(address account, uint256 amount)",
+        "burnFrom(address account, uint256 amount)",
+        "name()",
+        "symbol()",
+        "decimals()",
+        "routeMessage(Client.Any2EVMMessage calldata message,\n    uint16 gasForCallExactCheck,\n    uint256 gasLimit,\n    address receiver)",
+        "getOnRamp(uint64 destChainSelector)",
+        "isOffRamp(uint64 sourceChainSelector, address offRamp)",
+        "owner()",
+        "transferOwnership(address to)",
+        "_transferOwnership(address to)"
+      ]
+    }
+  ],
+  "union_flags": [],
+  "pattern_eval": [
+    {
+      "pattern": "adapter_donation",
+      "required_flags": [
+        "has_exchangeRate",
+        "rate_reads_pool_balance"
+      ],
+      "missing_flags": [
+        "has_exchangeRate",
+        "rate_reads_pool_balance"
+      ],
+      "applicable": false,
+      "verdict": "not applicable \u2014 required surface not found in inspected source"
+    },
+    {
+      "pattern": "unit_composition_error",
+      "required_flags": [
+        "has_rebase_multiplier",
+        "has_getPrice"
+      ],
+      "missing_flags": [
+        "has_rebase_multiplier",
+        "has_getPrice"
+      ],
+      "applicable": false,
+      "verdict": "not applicable \u2014 required surface not found in inspected source"
+    },
+    {
+      "pattern": "stale_price_multicall",
+      "required_flags": [
+        "has_multicall_depositAndMint",
+        "price_passed_in_not_rederived"
+      ],
+      "missing_flags": [
+        "has_multicall_depositAndMint",
+        "price_passed_in_not_rederived"
+      ],
+      "applicable": false,
+      "verdict": "not applicable \u2014 required surface not found in inspected source"
+    }
+  ],
+  "applicable_patterns": [],
+  "headline": "**No exploitable pattern within the checked classes** on Multipli's Base-deployed set. The inspected contracts do not expose the adapter conversion / oracle composition / stale-multicall surfaces the RWA playbook probes. This is a legitimate result, not a failure \u2014 see coverage below for what that does and does not establish.",
+  "coverage": [
+    "Inspected 2 contract(s) actually published for Base by Multipli (rwaUSD token proxy + CCIP bridge pool). Deployment and bytecode confirmed on-chain via `cast code`.",
+    "Verified source pulled from Blockscout (keyless); ERC1967 proxies resolved to their EIP-1967 implementation and that source reconned too.",
+    "NOT covered: Multipli's full protocol (Vat/Spotter/Jug/GemJoin/Clipper adapters, price feeds) is deployed on ETHEREUM as a MakerDAO fork, not on Base \u2014 a different architecture from the v2 adapter suite this playbook's patterns target. Running those patterns against a Maker-fork would require Ethereum RPC access and patterns tuned to Vat/urn accounting.",
+    "This run checks STRUCTURAL preconditions only (does the adapter-donation / multiplier / stale-multicall surface exist in verified source). It does not execute PoCs against mainnet and makes no claim about economic exploitability of contracts outside the checked classes."
+  ]
+}

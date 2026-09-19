@@ -364,7 +364,7 @@ table.diff-table tr.anomalous td:first-child {
   position: relative;
 }
 table.diff-table tr.anomalous td:first-child::before {
-  content: "⚠ ";
+  content: "! ";
 }
 table.diff-table td.z-score { font-weight: 700; }
 
@@ -513,6 +513,195 @@ footer.statusbar {
   margin-top: 2px;
 }
 </style>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<style>
+/* ============================================================================
+   ARCADE THEME OVERRIDE  ("Red Queen" as an Attacker-vs-Defender pixel cabinet)
+   Inspiration: retro pixel-game UI board. Pure restyle — no DOM/JS changes.
+   Loaded after the base stylesheet so equal-specificity rules win by source order;
+   `html` prefixes bump specificity where the base uses single-class rules.
+   Degrades to monospace + solid colors offline (Google Fonts optional).
+============================================================================ */
+:root{
+  --arc-bg1:#0b0a24; --arc-bg2:#141046; --arc-bg3:#1d1660;
+  --arc-panel:#191350; --arc-panel2:#221a63; --arc-edge:#06040f;
+  --arc-red:#ff3b5c; --arc-red-d:#7a1030;
+  --arc-green:#4dffa0; --arc-green-d:#0f6b45;
+  --arc-yellow:#ffd23f; --arc-cyan:#57d1ff; --arc-purple:#8a6bff;
+  --arc-ink:#eae7ff; --arc-dim:#9a92d8; --arc-faint:#5b53a0;
+  --pix:'Press Start 2P','VT323',monospace;
+  --body:'VT323','JetBrains Mono',monospace;
+}
+*{ image-rendering:pixelated; }
+
+html body{
+  background:
+    radial-gradient(1200px 600px at 50% -10%, var(--arc-bg3) 0%, var(--arc-bg2) 45%, var(--arc-bg1) 100%);
+  color:var(--arc-ink);
+  font-family:var(--body);
+  font-size:17px; line-height:1.15;
+  position:relative;
+}
+/* starfield */
+html body::before{
+  content:""; position:fixed; inset:0; z-index:0; pointer-events:none;
+  background-image:
+    radial-gradient(1px 1px at 20% 30%, #fff 50%, transparent 51%),
+    radial-gradient(1px 1px at 70% 20%, #cfe3ff 50%, transparent 51%),
+    radial-gradient(1px 1px at 40% 70%, #fff 50%, transparent 51%),
+    radial-gradient(1px 1px at 85% 60%, #ffd6e6 50%, transparent 51%),
+    radial-gradient(1px 1px at 12% 85%, #fff 50%, transparent 51%),
+    radial-gradient(2px 2px at 60% 80%, #fff6b0 50%, transparent 51%),
+    radial-gradient(1px 1px at 90% 88%, #b6f5ff 50%, transparent 51%);
+  background-size:100% 100%; opacity:.55;
+}
+/* scanlines + vignette */
+html body::after{
+  content:""; position:fixed; inset:0; z-index:9999; pointer-events:none;
+  background:
+    repeating-linear-gradient(0deg, rgba(0,0,0,.16) 0 2px, transparent 2px 4px),
+    radial-gradient(120% 120% at 50% 50%, transparent 60%, rgba(0,0,0,.45) 100%);
+  mix-blend-mode:multiply;
+}
+.split, header, footer{ position:relative; z-index:1; }
+
+/* ---------- HEADER = arcade marquee ---------- */
+html header{
+  background:linear-gradient(180deg,#241a6b,#120e3a);
+  border-bottom:4px solid var(--arc-edge);
+  box-shadow:0 4px 0 rgba(138,107,255,.5), 0 0 24px rgba(138,107,255,.25) inset;
+  padding:14px 18px;
+}
+html header .brand h1, html .brand h1 .rq{
+  font-family:var(--pix); font-size:18px; letter-spacing:1px; line-height:1.4;
+  color:var(--arc-red);
+  text-shadow:3px 3px 0 var(--arc-edge), 0 0 14px rgba(255,59,92,.45);
+}
+html .subtitle{
+  font-family:var(--pix); font-size:8px; color:var(--arc-cyan); letter-spacing:1px;
+  text-shadow:1px 1px 0 var(--arc-edge);
+}
+html .status-label{ font-family:var(--pix); font-size:8px; color:var(--arc-dim); letter-spacing:1px; }
+html .status-label .val{ color:var(--arc-yellow); }
+html .conn-indicator{
+  font-family:var(--pix); font-size:8px; padding:6px 8px; border:2px solid var(--arc-edge);
+  box-shadow:3px 3px 0 var(--arc-edge); letter-spacing:1px;
+}
+html .conn-indicator.live{ background:var(--arc-green); color:#04321f; }
+html .conn-indicator.mock{ background:var(--arc-yellow); color:#3a2a00; }
+html .status-dot{ width:14px; height:14px; border-radius:0; border:2px solid var(--arc-edge); box-shadow:0 0 10px currentColor; }
+html .status-dot.idle{ background:var(--arc-faint); color:var(--arc-faint); }
+html .status-dot.attacking{ background:var(--arc-red); color:var(--arc-red); animation:arcBlink .6s steps(1) infinite; }
+html .status-dot.synthesizing{ background:var(--arc-cyan); color:var(--arc-cyan); animation:arcBlink .8s steps(1) infinite; }
+html .status-dot.hardened{ background:var(--arc-green); color:var(--arc-green); }
+
+/* ---------- CABINETS ---------- */
+html .split{ gap:16px; padding:16px; align-items:start; }
+html .panel{
+  background:linear-gradient(180deg,var(--arc-panel2),var(--arc-panel));
+  border:3px solid var(--arc-edge);
+  border-radius:0;
+  box-shadow:0 0 0 3px rgba(255,255,255,.04), 8px 8px 0 rgba(0,0,0,.45);
+  padding:14px;
+}
+html .panel.attacker{ box-shadow:0 0 0 3px var(--arc-red-d), 8px 8px 0 rgba(0,0,0,.5), 0 0 26px rgba(255,59,92,.18); }
+html .panel.defender{ box-shadow:0 0 0 3px var(--arc-green-d), 8px 8px 0 rgba(0,0,0,.5), 0 0 26px rgba(77,255,160,.16); }
+html .panel-title{
+  font-family:var(--pix); font-size:12px; letter-spacing:1px;
+  border:2px solid var(--arc-edge); box-shadow:3px 3px 0 var(--arc-edge);
+  padding:8px 10px; margin-bottom:12px; display:flex; align-items:center; gap:8px;
+}
+html .panel.attacker .panel-title{ background:var(--arc-red); color:#2a0410; }
+html .panel.defender .panel-title{ background:var(--arc-green); color:#03301d; }
+html .panel.attacker .panel-title::after{ content:"P1"; margin-left:auto; font-size:8px; opacity:.7; }
+html .panel.defender .panel-title::after{ content:"P2"; margin-left:auto; font-size:8px; opacity:.7; }
+
+html .section{ margin-bottom:14px; }
+html .section-label{
+  font-family:var(--pix); font-size:8px; letter-spacing:1px; color:var(--arc-cyan);
+  text-transform:uppercase; margin-bottom:7px; display:flex; justify-content:space-between;
+}
+html .pattern-name, html .invariant-name{
+  font-family:var(--body); font-size:19px; color:var(--arc-yellow);
+  text-shadow:1px 1px 0 var(--arc-edge);
+}
+
+/* ---------- pixel progress bars (segmented) ---------- */
+html .progress-track{
+  height:16px; background:#0c0930; border:2px solid var(--arc-edge); border-radius:0;
+  box-shadow:inset 2px 2px 0 rgba(0,0,0,.5);
+}
+html .progress-fill{
+  background-image:repeating-linear-gradient(90deg,var(--arc-cyan) 0 8px, #2aa9e6 8px 10px);
+  border-radius:0; box-shadow:0 0 8px rgba(87,209,255,.6); height:100%;
+}
+html .panel.attacker .progress-fill{ background-image:repeating-linear-gradient(90deg,var(--arc-red) 0 8px, #b21c3c 8px 10px); box-shadow:0 0 8px rgba(255,59,92,.6); }
+html .progress-caption, html .corpus-caption{ font-family:var(--body); font-size:15px; color:var(--arc-dim); margin-top:5px; }
+html .corpus-caption .count{ color:var(--arc-green); }
+html .corpus-caption .violations{ color:var(--arc-yellow); }
+
+/* ---------- dialogue boxes (log / code) ---------- */
+html .log-feed, html .timeline, html .code-block{
+  background:#0c0930; border:2px solid var(--arc-edge);
+  box-shadow:inset 3px 3px 0 rgba(0,0,0,.5); border-radius:0;
+}
+html .log-feed .line{ font-family:var(--body); font-size:15px; color:#b9e6c9; line-height:1.25; }
+html .log-feed .line::before{ content:"> "; color:var(--arc-green); }
+html .tc-name{ color:var(--arc-cyan); font-family:var(--body); font-size:15px; }
+html .tc-args{ color:var(--arc-dim); }
+html .tc-result{ color:#c8f5d8; font-family:var(--body); font-size:14px; }
+html .code-block code{ font-family:'VT323',monospace; font-size:15px; line-height:1.25; }
+html .tok-kw{ color:var(--arc-purple); } html .tok-str{ color:var(--arc-yellow); } html .tok-comment{ color:var(--arc-faint); }
+
+/* ---------- result / guard banners ---------- */
+html .result-banner, html .guard-banner{
+  font-family:var(--pix); font-size:12px; letter-spacing:1px; text-align:center;
+  padding:14px 10px; border:3px solid var(--arc-edge); border-radius:0;
+  box-shadow:5px 5px 0 rgba(0,0,0,.5);
+}
+html .result-banner.exploit{ background:var(--arc-red); color:#fff; text-shadow:2px 2px 0 var(--arc-edge); animation:arcFlash .5s steps(1) infinite; }
+html .result-banner.reverted{ background:#2a2550; color:var(--arc-dim); }
+html .guard-banner{ background:var(--arc-green); color:#03301d; }
+html .guard-banner.pending{ background:var(--arc-yellow); color:#3a2a00; animation:arcBlink 1s steps(1) infinite; }
+
+/* ---------- diff table ---------- */
+html .diff-table{ border:2px solid var(--arc-edge); border-collapse:separate; border-spacing:0; width:100%; }
+html .diff-table th{ font-family:var(--pix); font-size:7px; letter-spacing:1px; background:#120e3a; color:var(--arc-cyan); padding:7px 6px; }
+html .diff-table td{ font-family:var(--body); font-size:15px; padding:6px; border-top:2px solid var(--arc-edge); }
+html .diff-table tr.anomalous td{ background:rgba(255,59,92,.12); color:#ffc9d4; }
+html .diff-table tr.anomalous td:first-child::before{ content:""; }        /* drop wrapping text marker */
+html .diff-table tr.anomalous td:first-child{ border-left:4px solid var(--arc-red); }
+html .diff-table td:first-child{ white-space:nowrap; }
+html .diff-table .z-score{ color:var(--arc-yellow); text-align:right; }
+
+/* ---------- gauge ---------- */
+html .gauge-track{ height:18px; background:#0c0930; border:2px solid var(--arc-edge); position:relative; box-shadow:inset 2px 2px 0 rgba(0,0,0,.5); }
+html .gauge-observed{ height:100%; background:repeating-linear-gradient(90deg,var(--arc-green) 0 8px,#1f9c68 8px 10px); }
+html .gauge-threshold-line{ position:absolute; top:-3px; bottom:-3px; width:4px; background:var(--arc-red); box-shadow:0 0 8px var(--arc-red); }
+html .gauge-legend{ font-family:var(--body); font-size:15px; color:var(--arc-dim); margin-top:6px; display:flex; justify-content:space-between; }
+html .gauge-legend b{ color:var(--arc-ink); }
+html .margin-pill{ font-family:var(--pix); font-size:8px; background:var(--arc-purple); color:#fff; padding:5px 8px; border:2px solid var(--arc-edge); box-shadow:3px 3px 0 var(--arc-edge); display:inline-block; margin-top:8px; }
+
+/* ---------- bypass rows ---------- */
+html .bypass-row{ font-family:var(--body); font-size:16px; padding:7px 9px; background:#120e3a; border:2px solid var(--arc-edge); margin-bottom:6px; display:flex; justify-content:space-between; align-items:center; }
+html .badge{ font-family:var(--pix); font-size:7px; letter-spacing:1px; padding:5px 7px; border:2px solid var(--arc-edge); box-shadow:2px 2px 0 var(--arc-edge); }
+html .badge.pass{ background:var(--arc-red); color:#fff; }     /* bypass succeeded = bad */
+html .badge.fail{ background:var(--arc-green); color:#03301d; } /* blocked = good */
+
+/* ---------- status bar (score row) ---------- */
+html footer.statusbar{ background:linear-gradient(180deg,#120e3a,#0a0826); border-top:4px solid var(--arc-edge); box-shadow:0 -3px 0 rgba(138,107,255,.4); }
+html .stat-cell .stat-value{ font-family:var(--pix); font-size:16px; color:var(--arc-yellow); text-shadow:2px 2px 0 var(--arc-edge); }
+html .stat-cell .stat-label{ font-family:var(--pix); font-size:7px; letter-spacing:1px; color:var(--arc-dim); }
+
+@keyframes arcBlink{ 0%,50%{opacity:1;} 51%,100%{opacity:.25;} }
+@keyframes arcFlash{ 0%,50%{ filter:brightness(1);} 51%,100%{ filter:brightness(1.5);} }
+
+/* ---------- responsive: stack cabinets on narrow screens ---------- */
+@media (max-width:760px){
+  html .split{ grid-template-columns:1fr !important; display:grid; }
+  html .brand h1, html .brand h1 .rq{ font-size:13px; }
+}
+</style>
 </head>
 <body>
 
@@ -531,7 +720,7 @@ footer.statusbar {
 <div class="split">
   <!-- ================= LEFT: ATTACKER ================= -->
   <section class="panel attacker">
-    <div class="panel-title"><span class="icon">⚔</span> Attacker</div>
+    <div class="panel-title">Attacker</div>
 
     <div class="section">
       <div class="section-label">
@@ -563,7 +752,7 @@ footer.statusbar {
 
   <!-- ================= RIGHT: DEFENDER ================= -->
   <section class="panel defender">
-    <div class="panel-title"><span class="icon">🛡</span> Defender</div>
+    <div class="panel-title">Defender</div>
 
     <div class="section">
       <div class="section-label"><span>Trace Diff — Anomalous Variable</span></div>
@@ -738,15 +927,20 @@ footer.statusbar {
   }
 
   // Very small, dependency-free "syntax highlight" for Solidity display purposes.
+  // Per-line tokenizer. Splits each line at "//" so the comment tail is wrapped LAST — this
+  // avoids the string/keyword passes ever matching the quotes inside an inserted span's own
+  // class attribute (which previously corrupted output into literal `"tok-comment">` text).
+  var SOL_KW = /\b(pragma|solidity|contract|abstract|function|import|internal|external|public|private|pure|view|payable|returns|return|require|assert|revert|error|if|else|for|while|mapping|memory|storage|calldata|immutable|constant|is|constructor|modifier|event|emit|address|uint256|uint|bool|string|bytes)\b/g;
   function highlightSolidity(src) {
-    var escaped = escapeHtml(src);
-    escaped = escaped.replace(/(\/\/.*$)/gm, '<span class="tok-comment">$1</span>');
-    escaped = escaped.replace(/"([^"]*)"/g, '<span class="tok-str">"$1"</span>');
-    escaped = escaped.replace(
-      /\b(pragma|solidity|contract|function|import|internal|external|public|private|pure|view|payable|returns|return|require|assert|if|else|for|while|memory|storage|calldata|is|constructor|modifier|event|emit|address|uint256|uint|bool|string|bytes)\b/g,
-      '<span class="tok-kw">$1</span>'
-    );
-    return escaped;
+    return escapeHtml(src).split("\n").map(function (line) {
+      var idx = line.indexOf("//");
+      var code = idx >= 0 ? line.slice(0, idx) : line;
+      var comment = idx >= 0 ? line.slice(idx) : "";
+      code = code.replace(/"([^"]*)"/g, '<span class="tok-str">"$1"</span>');
+      code = code.replace(SOL_KW, '<span class="tok-kw">$1</span>');
+      if (comment) comment = '<span class="tok-comment">' + comment + "</span>";
+      return code + comment;
+    }).join("\n");
   }
 
   function setText(id, text) {
@@ -818,7 +1012,7 @@ footer.statusbar {
         "<td>" + escapeHtml(row.variable) + "</td>" +
         "<td>" + escapeHtml(row.benign_max) + "</td>" +
         "<td>" + escapeHtml(row.exploit_delta) + "</td>" +
-        '<td class="z-score">' + Number(row.z_score).toFixed(1) + "</td>" +
+        '<td class="z-score">' + (row.z_score == null ? "MAX" : Number(row.z_score).toFixed(1)) + "</td>" +
         "</tr>";
     }).join("");
 
@@ -855,7 +1049,7 @@ footer.statusbar {
     var guardBanner = document.getElementById("guardBanner");
     if (def.guard_deployed) {
       guardBanner.className = "guard-banner";
-      guardBanner.textContent = "✓ Guard deployed: " + (inv.name || "invariant") + " active on-chain";
+      guardBanner.textContent = "Guard deployed: " + (inv.name || "invariant") + " active on-chain";
     } else {
       guardBanner.className = "guard-banner pending";
       var anyBypass = bypasses.some(function (b) { return b.passed; });

@@ -1,0 +1,32 @@
+{
+  "guard": "ExchangeRateDeltaBound_D5C853",
+  "threshold_bps": 1590,
+  "window_blocks": 1,
+  "forge_ok": true,
+  "attempts": [
+    {
+      "method": "split_into_10_subtransactions",
+      "success": false,
+      "reason": "per-block checkpoint catches the cumulative rate spike"
+    },
+    {
+      "method": "spread_across_20_blocks",
+      "success": true,
+      "reason": "a 1-block window re-checkpoints at the already-inflated rate; the donation in a prior block is not seen as movement during the deposit",
+      "mitigation_required": "widen window_blocks to span plausible donation-to-use gaps, or checkpoint on any pool-balance change"
+    },
+    {
+      "method": "use_multicall_path",
+      "success": true,
+      "reason": "AccountManager.depositAndMint() is not behind the deposit()-scoped guard",
+      "mitigation_required": "add the invariant at the AccountManager.depositAndMint() multicall boundary"
+    },
+    {
+      "method": "gas_variance",
+      "success": false,
+      "reason": "guard is state-based, not gas-based; N/A"
+    }
+  ],
+  "n_bypassed": 2,
+  "resistance_score": "MEDIUM - requires layered defense"
+}

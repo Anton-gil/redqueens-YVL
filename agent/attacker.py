@@ -92,7 +92,32 @@ console2.log("PROFIT_USD", gap);
 require(gap > 0, "no mispricing");
 """
 
+# Vuln D exercises the AccrualSemanticConsistency invariant class (distinct from Vuln B's
+# composition check): the xStock profile declares a dividend/rebase accrual (rebaseMultiplier grows),
+# but the router prices the flat raw feed, so observed price behavior is inconsistent with the
+# declared accrual type. Reported as a mispricing finding (no attacker profit).
+_ACCRUAL_MISMATCH_BODY = """
+vm.prank(admin);
+xstockAdapter.applyCorporateAction(1.5e18);        // declared accrual grows 1.0x -> 1.5x
+uint256 mult = xstockAdapter.rebaseMultiplier();
+uint256 routerPrice = priceRouter.getPrice(address(xstockAdapter)).price;
+uint256 rawFeed = stockUsdFeed.latestPrice();
+uint256 gap = routerPrice >= rawFeed ? routerPrice - rawFeed : rawFeed - routerPrice;
+console2.log("rebaseMultiplier", mult);
+console2.log("routerPrice", routerPrice);
+console2.log("rawFeed", rawFeed);
+console2.log("PROFIT_USD", gap);                   // 0 profit; the finding IS the type inconsistency
+require(mult > 1e18, "corporate action not applied");
+require(routerPrice == rawFeed, "router unexpectedly folded the accrual multiplier");
+"""
+
 _PATTERN_IMPL = {
+    "accrual_type_mismatch": {
+        "recon": ["xstockAdapter", "PriceRouter"],
+        "required_flags": {"xstockAdapter": ["has_rebase_multiplier"], "PriceRouter": ["has_getPrice"]},
+        "body": _ACCRUAL_MISMATCH_BODY,
+        "confirm_kind": "MISPRICING_FINDING",
+    },
     "adapter_donation": {
         "recon": ["goldAdapter"],
         "required_flags": {"goldAdapter": ["has_exchangeRate", "rate_reads_pool_balance"]},
@@ -275,6 +300,85 @@ class LLMAgent:
                 "impact_usd": 0.0, "attempts": self.rec.llm_calls}
 
 
+class OpenAILLMAgent:
+    """OpenAI tool-calling loop — same tools, same result schema as the Claude agent. Runs when
+    OPENAI_API_KEY is set. Uses chat.completions with function tools; bounded by the same guards."""
+
+    name = "openai"
+
+    _SYSTEM = LLMAgent._SYSTEM  # identical framing; provider differs, task does not
+
+    # Convert the shared Anthropic-style TOOL_SCHEMAS into OpenAI function-tool format.
+    _TOOLS = [{"type": "function",
+               "function": {"name": t["name"], "description": t["description"],
+                            "parameters": t["input_schema"]}} for t in tools.TOOL_SCHEMAS]
+
+    def __init__(self, playbook, rec):
+        import openai
+        self.playbook = playbook
+        self.rec = rec
+        self.client = openai.OpenAI(api_key=config.OPENAI_API_KEY)
+
+    def _charge(self, usage):
+        if not usage:
+            return
+        cost = (usage.prompt_tokens / 1e6) * config.MODEL_PRICE_PER_MTOK["input"] + \
+               (usage.completion_tokens / 1e6) * config.MODEL_PRICE_PER_MTOK["output"]
+        self.rec.cost_usd += cost
+        self.rec.llm_calls += 1
+        config.LOGS_DIR.mkdir(exist_ok=True)
+        (config.LOGS_DIR / ("openai_%d_%d.json" % (int(time.time() * 1000), self.rec.llm_calls))).write_text(
+            json.dumps({"prompt_tokens": usage.prompt_tokens, "completion_tokens": usage.completion_tokens,
+                        "cost_usd": cost, "cumulative_cost_usd": self.rec.cost_usd}, indent=2))
+
+    def run_pattern(self, pattern):
+        base = {"name": pattern["name"], "vuln_ref": pattern.get("vuln_ref"),
+                "reference_incident": pattern.get("reference_incident"), "target": pattern.get("target")}
+        messages = [{"role": "system", "content": self._SYSTEM},
+                    {"role": "user", "content": "Attack pattern:\n" + yaml.safe_dump(pattern)}]
+        confirmed = None
+        for _ in range(config.MAX_TOOL_CALLS_PER_PATTERN):
+            if self.rec.cost_usd >= config.TOTAL_BUDGET_USD:
+                self.rec.log("BUDGET KILL SWITCH: $%.4f >= $%.2f" % (self.rec.cost_usd, config.TOTAL_BUDGET_USD))
+                break
+            resp = self.client.chat.completions.create(
+                model=config.OPENAI_MODEL, messages=messages, tools=self._TOOLS, tool_choice="auto",
+                max_completion_tokens=config.MAX_OUTPUT_TOKENS_PER_CALL)
+            self._charge(resp.usage)
+            msg = resp.choices[0].message
+            if msg.content and msg.content.strip():
+                self.rec.log(msg.content.strip())
+            asst = {"role": "assistant", "content": msg.content or ""}
+            if msg.tool_calls:
+                asst["tool_calls"] = [{"id": tc.id, "type": "function",
+                                       "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                                      for tc in msg.tool_calls]
+            messages.append(asst)
+            if not msg.tool_calls:
+                break
+            for tc in msg.tool_calls:
+                try:
+                    args = json.loads(tc.function.arguments or "{}")
+                except json.JSONDecodeError:
+                    args = {}
+                result = tools.dispatch(tc.function.name, args)
+                self.rec.tool(tc.function.name, args, result)
+                if tc.function.name == "fork_and_execute" and result.get("passed"):
+                    confirmed = result
+                messages.append({"role": "tool", "tool_call_id": tc.id,
+                                 "content": json.dumps({k: v for k, v in result.items() if k != "poc_solidity"})[:6000]})
+            if confirmed:
+                break
+        if confirmed:
+            return {**base, "preconditions_met": True, "attempted": True,
+                    "result": "EXPLOIT_CONFIRMED", "impact_usd": confirmed.get("profit_usd") or 0.0,
+                    "rate_before": confirmed.get("rate_before"), "rate_after": confirmed.get("rate_after"),
+                    "attempts": self.rec.llm_calls, "poc_solidity": confirmed.get("poc_solidity"),
+                    "logs": confirmed.get("logs", [])}
+        return {**base, "preconditions_met": True, "attempted": True, "result": "NO_EXPLOIT",
+                "impact_usd": 0.0, "attempts": self.rec.llm_calls}
+
+
 def _load_playbook():
     return yaml.safe_load(config.PLAYBOOK_PATH.read_text())
 
@@ -283,14 +387,33 @@ def run_attack(force_agent=None):
     """Run the full playbook loop. Returns the result dict and writes it to state + logs."""
     playbook = _load_playbook()
     rec = _RunRecorder()
-    use_llm = (force_agent == "llm") or (force_agent is None and config.has_llm())
-    agent = LLMAgent(playbook, rec) if use_llm else FallbackAgent(playbook, rec)
+    # Provider selection: explicit override wins, else auto (openai > anthropic > fallback).
+    if force_agent == "fallback":
+        agent = FallbackAgent(playbook, rec)
+    elif force_agent == "openai":
+        agent = OpenAILLMAgent(playbook, rec)
+    elif force_agent == "anthropic":
+        agent = LLMAgent(playbook, rec)
+    elif force_agent == "llm" or (force_agent is None and config.has_llm()):
+        provider = config.llm_provider()
+        agent = OpenAILLMAgent(playbook, rec) if provider == "openai" else LLMAgent(playbook, rec)
+    else:
+        agent = FallbackAgent(playbook, rec)
     rec.log("agent=%s | patterns=%d | budget=$%.2f" % (agent.name, len(playbook), config.TOTAL_BUDGET_USD))
 
     patterns = []
-    for pattern in playbook:
-        rec.log("=== pattern: %s (%s) ===" % (pattern["name"], pattern.get("vuln_ref")))
-        patterns.append(agent.run_pattern(pattern))
+    try:
+        for pattern in playbook:
+            rec.log("=== pattern: %s (%s) ===" % (pattern["name"], pattern.get("vuln_ref")))
+            patterns.append(agent.run_pattern(pattern))
+    except Exception as e:  # noqa: BLE001 - any LLM API failure (quota/auth/rate/network)
+        # Graceful degradation: don't crash a run because the LLM backend is unavailable. Fall back
+        # to the deterministic agent so the pipeline still produces results.
+        rec.log("LLM agent unavailable (%s: %s); falling back to deterministic FallbackAgent"
+                % (type(e).__name__, str(e)[:160]))
+        print("[warn] LLM backend failed (%s) — falling back to deterministic agent" % type(e).__name__)
+        agent = FallbackAgent(playbook, rec)
+        patterns = [agent.run_pattern(p) for p in playbook]
 
     confirmed = [p for p in patterns if p["result"] == "EXPLOIT_CONFIRMED"]
     findings = [p for p in patterns if p["result"] in ("EXPLOIT_CONFIRMED", "MISPRICING_FINDING")]
@@ -326,8 +449,8 @@ def run_attack(force_agent=None):
 def main():
     import argparse
     ap = argparse.ArgumentParser(description="Red Queen attack loop")
-    ap.add_argument("--agent", choices=["fallback", "llm"], default=None,
-                    help="force agent (default: llm if ANTHROPIC_API_KEY set, else fallback)")
+    ap.add_argument("--agent", choices=["fallback", "llm", "openai", "anthropic"], default=None,
+                    help="force agent (default: auto — openai if OPENAI_API_KEY set, else anthropic, else fallback)")
     args = ap.parse_args()
     result = run_attack(force_agent=args.agent)
     print("\n" + "=" * 70)

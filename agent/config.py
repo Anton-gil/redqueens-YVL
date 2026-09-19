@@ -17,18 +17,38 @@ STATE_DIR = PROJECT_ROOT / "orchestrator" / "state"
 DEPLOYMENT_PATH = STATE_DIR / "deployment.json"
 LOGS_DIR = PROJECT_ROOT / "logs"
 
-FOUNDRY_BIN = "/home/anton/.foundry/bin"
+# Candidate locations for the Foundry bin dir, across the machines this has run on.
+# Overridable with FOUNDRY_BIN env var. First existing dir wins; the WSL/original path is kept
+# last so the repo still runs unchanged there.
+_FOUNDRY_BIN_CANDIDATES = [
+    os.environ.get("FOUNDRY_BIN", ""),
+    os.path.join(os.path.expanduser("~"), ".foundry", "bin"),
+    "/home/anton/.foundry/bin",
+]
+FOUNDRY_BIN = next((p for p in _FOUNDRY_BIN_CANDIDATES if p and os.path.isdir(p)),
+                   os.path.join(os.path.expanduser("~"), ".foundry", "bin"))
+
+
+# Common misspellings mapped to the canonical env var the code + SDKs expect.
+_ENV_ALIASES = {"OPEN_AI_KEY": "OPENAI_API_KEY", "OPENAI_KEY": "OPENAI_API_KEY",
+                "ANTHROPIC_KEY": "ANTHROPIC_API_KEY", "CLAUDE_API_KEY": "ANTHROPIC_API_KEY"}
 
 
 def _load_dotenv():
-    env_path = PROJECT_ROOT / ".env"
-    if env_path.exists():
+    # Search the repo root first, then its parent (e.g. red/.env). NOT the home dir — avoid slurping
+    # unrelated home secrets. First value for a key wins (setdefault).
+    for env_path in (PROJECT_ROOT / ".env", PROJECT_ROOT.parent / ".env"):
+        if not env_path.exists():
+            continue
         for line in env_path.read_text().splitlines():
             line = line.strip()
             if not line or line.startswith("#") or "=" not in line:
                 continue
             k, _, v = line.partition("=")
-            os.environ.setdefault(k.strip(), v.strip())
+            k, v = k.strip(), v.strip()
+            os.environ.setdefault(k, v)
+            if k in _ENV_ALIASES:
+                os.environ.setdefault(_ENV_ALIASES[k], v)
 
 
 def ensure_foundry_on_path():
@@ -41,16 +61,22 @@ _load_dotenv()
 ensure_foundry_on_path()
 
 # --- Cost / safety guards (kept from the v2 plan) ---
-MAX_TOOL_CALLS_PER_PATTERN = 15
-MAX_OUTPUT_TOKENS_PER_CALL = 4096
+MAX_TOOL_CALLS_PER_PATTERN = 8      # conservative: caps LLM round-trips per pattern
+MAX_OUTPUT_TOKENS_PER_CALL = 2048   # conservative output cap per call
 TOTAL_BUDGET_USD = float(os.environ.get("RED_QUEEN_BUDGET_USD", "2.00"))
 PATTERN_TIMEOUT_SECONDS = 300          # 5-minute kill switch per pattern
 FORK_EXEC_TIMEOUT_SECONDS = 60         # forge test per PoC
 MAX_RETRIES_PER_PATTERN = 5
 
 # --- LLM ---
+# Two providers supported. If OPENAI_API_KEY is set it takes precedence (the OpenAI tool-calling
+# agent runs); else ANTHROPIC_API_KEY runs the Claude agent; else the deterministic FallbackAgent.
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 ATTACK_MODEL = os.environ.get("RED_QUEEN_ATTACK_MODEL", "claude-sonnet-5")
+# Conservative + cheap by default: gpt-4o-mini is more than enough for playbook-driven tool-calling
+# and costs a fraction of the larger models. Override with RED_QUEEN_OPENAI_MODEL if needed.
+OPENAI_MODEL = os.environ.get("RED_QUEEN_OPENAI_MODEL", "gpt-4o-mini")
 
 # Rough per-token USD prices for the budget guard (input, output). Deliberately conservative;
 # the guard is a runaway-bill kill switch, not accounting.
@@ -67,5 +93,14 @@ FORK_BLOCK_NUMBER = int(os.environ.get("FORK_BLOCK_NUMBER", "20000000"))
 DEV_PRIVATE_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 
 
+def llm_provider():
+    """Which LLM backend the attack agent should use, or None for the deterministic fallback."""
+    if OPENAI_API_KEY:
+        return "openai"
+    if ANTHROPIC_API_KEY:
+        return "anthropic"
+    return None
+
+
 def has_llm():
-    return bool(ANTHROPIC_API_KEY)
+    return bool(OPENAI_API_KEY or ANTHROPIC_API_KEY)

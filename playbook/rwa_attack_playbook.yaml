@@ -60,3 +60,22 @@
     - depositAndMint(adapter, amount=1_000e18)            # one read feeds both share-calc and principal
   success_criteria:
     - minted_value > expected_value_at_post_deposit_price
+
+- name: accrual_type_mismatch
+  reference_incident: "Rebasing/dividend accrual mispricing (RWA corporate-action class)"
+  target_type: adapter
+  target: xstockAdapter
+  vuln_ref: "Vuln D"
+  # Distinct from Vuln B: B is an oracle *composition* type error; this pattern probes the
+  # AccrualSemanticConsistency invariant class — the declared accrual behavior over time vs. what the
+  # price path actually reflects. The xStock profile carries a dividend/rebase multiplier (accrual
+  # that should move a holder's recorded value), yet the router prices the flat raw feed, so the
+  # observed price behavior is inconsistent with the declared accrual type.
+  preconditions:
+    - adapter declares a corporate-action / rebase multiplier (an accrual type other than flat price)
+    - price path prices the raw feed without folding the declared accrual in
+  attack_template:
+    - apply_corporate_action(adapter, multiplier=1.5e18)   # declared accrual grows 1.0x -> 1.5x
+    - observe getPrice(adapter) unchanged                  # observed price flat -> type mismatch
+  success_criteria:
+    - declared_accrual_grew AND observed_price_flat

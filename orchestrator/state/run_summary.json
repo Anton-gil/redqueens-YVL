@@ -1,0 +1,49 @@
+{
+  "invariant_classes_exercised": [
+    "ExchangeRateDeltaBound",
+    "AccrualSemanticConsistency"
+  ],
+  "accrual_invariant": {
+    "class": "AccrualSemanticConsistency",
+    "checked": 10,
+    "violations": 0,
+    "monotonic": true,
+    "events": 10,
+    "expected_type": "Rebase"
+  },
+  "agent": "fallback",
+  "headline": "EXPLOIT FOUND: $46,000 unbacked (adapter_donation / Vuln A)",
+  "confirmed_exploits": [
+    "adapter_donation",
+    "stale_price_multicall"
+  ],
+  "other_findings": [
+    "unit_composition_error",
+    "accrual_type_mismatch"
+  ],
+  "advisories": [
+    {
+      "advisory_id": "RQ-2026-0001",
+      "vuln_ref": "Vuln A",
+      "impact_usd": 46000.00000000001,
+      "md_path": "/Users/AntonyThomasSharone/red/redqueens-YVL/advisories/RQ-2026-0001.md",
+      "pdf_path": "/Users/AntonyThomasSharone/red/redqueens-YVL/advisories/RQ-2026-0001.pdf"
+    },
+    {
+      "advisory_id": "RQ-2026-0002",
+      "vuln_ref": "Vuln C",
+      "impact_usd": 46000.00000000001,
+      "md_path": "/Users/AntonyThomasSharone/red/redqueens-YVL/advisories/RQ-2026-0002.md",
+      "pdf_path": "/Users/AntonyThomasSharone/red/redqueens-YVL/advisories/RQ-2026-0002.pdf"
+    }
+  ],
+  "guard": {
+    "deployed": true,
+    "reattack_reverts": true,
+    "invariant_gas_overhead_steady_state": 11257,
+    "invariant_gas_overhead_steady_state_pct": 8.6
+  },
+  "bypass_resistance": "MEDIUM - requires layered defense",
+  "coverage_warnings_flagged": 9,
+  "ts": 1789824569.89342
+}

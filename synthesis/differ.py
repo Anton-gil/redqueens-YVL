@@ -95,13 +95,14 @@ def _build_candidate(class_name, exploit_trace, safety_multiplier):
 def compute_candidates(exploit_trace, stats=None, safety_multiplier=10):
     stats = stats if stats is not None else load_stats()
     ranked = _rank_anomalies(exploit_trace, stats)
-    primary_cls, alt_cls = _PATTERN_MATCH.get(
-        exploit_trace["name"], ("AdapterConversionIntegrity", "ExchangeRateDeltaBound"))
+    primary_cls, alt_cls, boundary = _PATTERN_MATCH.get(
+        exploit_trace["name"], ("AdapterConversionIntegrity", "ExchangeRateDeltaBound", "deposit"))
     primary_spec, primary_thr = _build_candidate(primary_cls, exploit_trace, safety_multiplier)
     alt_spec, alt_thr = _build_candidate(alt_cls, exploit_trace, safety_multiplier)
     return {
         "exploit": exploit_trace["name"],
         "vuln_ref": exploit_trace.get("vuln_ref"),
+        "boundary": boundary,
         "top_anomaly": ranked[0],
         "ranked_anomalies": ranked,
         "safety_multiplier": safety_multiplier,
