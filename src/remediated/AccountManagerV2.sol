@@ -55,7 +55,12 @@ contract AccountManagerV2 {
     function depositAndMint(address adapter, uint256 amount) external returns (uint256 minted) {
         require(isAdapter[adapter], "UNKNOWN_ADAPTER");
         PriceRouter.PriceData memory pd = priceRouter.getPrice(adapter);
-        uint256 shares = IAdapter(adapter).depositAtPrice(msg.sender, amount, pd.price);
+        // Remediation: use the correct share-accounting path (re-derives the adapter rate) instead
+        // of depositAtPrice(pd.price), which forwarded a USD/share PRICE as if it were the collateral
+        // RATE - a pre-existing unit bug that minted ~2000x wrong shares, corrupted exchangeRate, and
+        // then tripped the anchored guard on the NEXT benign deposit (red-team finding #7). The
+        // (vulnerable) VALUATION below is unchanged, so the guard is still what blocks donation.
+        uint256 shares = IAdapter(adapter).deposit(msg.sender, amount);
         ledger.lock(msg.sender, adapter, shares);
         uint256 value = (amount * pd.price) / 1e18;
         _creditPrincipal(msg.sender, adapter, amount, value);

