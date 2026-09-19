@@ -33,6 +33,7 @@
     - exchange_rate_delta_multiple > 10   # rate spikes >10x
 
 - name: unit_composition_error
+  impact_class: MISPRICING_FINDING  # depositor under-credit; attacker_profit=0 (no liquidation engine in mocks); never an attack headline
   reference_incident: "cbETH misconfig, Feb 2026, $1.78M loss"
   target_type: price_router
   target: xstockAdapter
