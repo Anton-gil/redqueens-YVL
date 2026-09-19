@@ -1,0 +1,244 @@
+{
+  "adapter_donation": {
+    "exploit": "adapter_donation",
+    "vuln_ref": "Vuln A",
+    "top_anomaly": {
+      "variable": "GoldAdapter.exchangeRate",
+      "exploit_delta": 230000,
+      "max_benign": 0.0,
+      "anomaly_score": Infinity,
+      "z_score": Infinity,
+      "unit": "bps",
+      "moves_benignly": false,
+      "derived": true
+    },
+    "ranked_anomalies": [
+      {
+        "variable": "GoldAdapter.exchangeRate",
+        "exploit_delta": 230000,
+        "max_benign": 0.0,
+        "anomaly_score": Infinity,
+        "z_score": Infinity,
+        "unit": "bps",
+        "moves_benignly": false,
+        "derived": true
+      },
+      {
+        "variable": "GoldAdapter.pool.balance",
+        "exploit_delta": 230000000000000000000000,
+        "max_benign": 1.5773207653643639e+21,
+        "anomaly_score": 145.81688458711795,
+        "z_score": 2177.4961791365586,
+        "moves_benignly": true
+      },
+      {
+        "variable": "GoldToken.balanceOf",
+        "exploit_delta": 230000000000000000000000,
+        "max_benign": 1.5773207653643639e+21,
+        "anomaly_score": 145.81688458711795,
+        "z_score": 2177.4961791365586,
+        "moves_benignly": true
+      },
+      {
+        "variable": "Ledger.principal",
+        "exploit_delta": 48000000000000000000000,
+        "max_benign": 2.853842809333387e+24,
+        "anomaly_score": 0.016819426719305558,
+        "z_score": -0.06945008601658724,
+        "moves_benignly": true
+      },
+      {
+        "variable": "rwaUSDToken.balanceOf",
+        "exploit_delta": 48000000000000000000000,
+        "max_benign": 2.853842809333387e+24,
+        "anomaly_score": 0.016819426719305558,
+        "z_score": -0.13585275331829655,
+        "moves_benignly": true
+      },
+      {
+        "variable": "rwaUSDToken.totalSupply",
+        "exploit_delta": 48000000000000000000000,
+        "max_benign": 2.853842809333387e+24,
+        "anomaly_score": 0.016819426719305558,
+        "z_score": -0.13585275331829655,
+        "moves_benignly": true
+      },
+      {
+        "variable": "GoldAdapter.totalShares",
+        "exploit_delta": 41666666666666666,
+        "max_benign": 1.4030044815636247e+21,
+        "anomaly_score": 2.969817075725223e-05,
+        "z_score": -0.3045890814006194,
+        "moves_benignly": true
+      },
+      {
+        "variable": "Ledger.lockedShares",
+        "exploit_delta": 41666666666666666,
+        "max_benign": 8.188338282736089e+21,
+        "anomaly_score": 5.088537530809483e-06,
+        "z_score": -0.2411239798134806,
+        "moves_benignly": true
+      },
+      {
+        "variable": "PriceRouter.price",
+        "exploit_delta": 0,
+        "max_benign": 0.0,
+        "anomaly_score": 0.0,
+        "z_score": 0.0,
+        "moves_benignly": false
+      }
+    ],
+    "safety_multiplier": 10,
+    "primary_candidate": {
+      "class": "ExchangeRateDeltaBound",
+      "name": "ExchangeRateDeltaBound_564B49",
+      "params": {
+        "adapter": "0xa722bdA6968F50778B973Ae2701e90200C564B49",
+        "max_delta_bps": 100,
+        "window_blocks": 1
+      },
+      "threshold": {
+        "threshold_bps": 100,
+        "exploit_value_bps": 230000,
+        "threshold_note": "benign exchange-rate delta is 0 across the corpus; 100 bps is a policy floor, not a max-benign*safety fit"
+      },
+      "description": "Per-window exchange-rate delta must stay within max_delta_bps of the checkpoint."
+    },
+    "alternative_candidate": {
+      "class": "AdapterConversionIntegrity",
+      "name": "AdapterConversionIntegrity_564B49",
+      "params": {
+        "adapter": "0xa722bdA6968F50778B973Ae2701e90200C564B49",
+        "router": "0x976C214741b4657bd99DFD38a5c0E3ac5C99D903",
+        "tolerance_bps": 100
+      },
+      "threshold": {
+        "tolerance_bps": 100,
+        "exploit_deviation_bps": 230000,
+        "threshold_note": "recorded value must be within 1% of tokens_in * oracle price"
+      },
+      "description": "Ledger-recorded value must match tokens_in * oracle price within tolerance."
+    }
+  },
+  "stale_price_multicall": {
+    "exploit": "stale_price_multicall",
+    "vuln_ref": "Vuln C",
+    "top_anomaly": {
+      "variable": "GoldAdapter.exchangeRate",
+      "exploit_delta": 230000,
+      "max_benign": 0.0,
+      "anomaly_score": Infinity,
+      "z_score": Infinity,
+      "unit": "bps",
+      "moves_benignly": false,
+      "derived": true
+    },
+    "ranked_anomalies": [
+      {
+        "variable": "GoldAdapter.exchangeRate",
+        "exploit_delta": 230000,
+        "max_benign": 0.0,
+        "anomaly_score": Infinity,
+        "z_score": Infinity,
+        "unit": "bps",
+        "moves_benignly": false,
+        "derived": true
+      },
+      {
+        "variable": "GoldAdapter.pool.balance",
+        "exploit_delta": 230000000000000000000000,
+        "max_benign": 1.5773207653643639e+21,
+        "anomaly_score": 145.81688458711795,
+        "z_score": 2177.4961791365586,
+        "moves_benignly": true
+      },
+      {
+        "variable": "GoldToken.balanceOf",
+        "exploit_delta": 230000000000000000000000,
+        "max_benign": 1.5773207653643639e+21,
+        "anomaly_score": 145.81688458711795,
+        "z_score": 2177.4961791365586,
+        "moves_benignly": true
+      },
+      {
+        "variable": "Ledger.principal",
+        "exploit_delta": 48000000000000000000000,
+        "max_benign": 2.853842809333387e+24,
+        "anomaly_score": 0.016819426719305558,
+        "z_score": -0.06945008601658724,
+        "moves_benignly": true
+      },
+      {
+        "variable": "rwaUSDToken.balanceOf",
+        "exploit_delta": 48000000000000000000000,
+        "max_benign": 2.853842809333387e+24,
+        "anomaly_score": 0.016819426719305558,
+        "z_score": -0.13585275331829655,
+        "moves_benignly": true
+      },
+      {
+        "variable": "rwaUSDToken.totalSupply",
+        "exploit_delta": 48000000000000000000000,
+        "max_benign": 2.853842809333387e+24,
+        "anomaly_score": 0.016819426719305558,
+        "z_score": -0.13585275331829655,
+        "moves_benignly": true
+      },
+      {
+        "variable": "GoldAdapter.totalShares",
+        "exploit_delta": 20833333333333,
+        "max_benign": 1.4030044815636247e+21,
+        "anomaly_score": 1.4849085378625878e-08,
+        "z_score": -0.30501353131155573,
+        "moves_benignly": true
+      },
+      {
+        "variable": "Ledger.lockedShares",
+        "exploit_delta": 20833333333333,
+        "max_benign": 8.188338282736089e+21,
+        "anomaly_score": 2.544268765404701e-09,
+        "z_score": -0.24119616646916173,
+        "moves_benignly": true
+      },
+      {
+        "variable": "PriceRouter.price",
+        "exploit_delta": 0,
+        "max_benign": 0.0,
+        "anomaly_score": 0.0,
+        "z_score": 0.0,
+        "moves_benignly": false
+      }
+    ],
+    "safety_multiplier": 10,
+    "primary_candidate": {
+      "class": "AdapterConversionIntegrity",
+      "name": "AdapterConversionIntegrity_564B49",
+      "params": {
+        "adapter": "0xa722bdA6968F50778B973Ae2701e90200C564B49",
+        "router": "0x976C214741b4657bd99DFD38a5c0E3ac5C99D903",
+        "tolerance_bps": 100
+      },
+      "threshold": {
+        "tolerance_bps": 100,
+        "exploit_deviation_bps": 230000,
+        "threshold_note": "recorded value must be within 1% of tokens_in * oracle price"
+      },
+      "description": "Ledger-recorded value must match tokens_in * oracle price within tolerance."
+    },
+    "alternative_candidate": {
+      "class": "ExchangeRateDeltaBound",
+      "name": "ExchangeRateDeltaBound_564B49",
+      "params": {
+        "adapter": "0xa722bdA6968F50778B973Ae2701e90200C564B49",
+        "max_delta_bps": 100,
+        "window_blocks": 1
+      },
+      "threshold": {
+        "threshold_bps": 100,
+        "exploit_value_bps": 230000,
+        "threshold_note": "benign exchange-rate delta is 0 across the corpus; 100 bps is a policy floor, not a max-benign*safety fit"
+      },
+      "description": "Per-window exchange-rate delta must stay within max_delta_bps of the checkpoint."
+    }
+  }
+}

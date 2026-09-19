@@ -1,0 +1,62 @@
+# Red Queen — RWA Attack Playbook
+#
+# Structured attack patterns (not a prose prompt). Each pattern carries:
+#   - preconditions: structural facts the agent verifies (via decompile + price_query) before
+#     attempting, so it doesn't burn tool calls on patterns that can't apply to a target.
+#   - attack_template: the ordered high-level steps the agent instantiates with real
+#     addresses/amounts into a concrete Foundry PoC.
+#   - success_criteria: what makes a run a confirmed exploit vs. a revert.
+#   - target: which deployed adapter this pattern points at in the demo topology.
+#
+# The loop runs each pattern in order; a pattern that fails all preconditions is skipped (a valid
+# result), and if every pattern is exhausted with no exploit the run reports "no exploits found"
+# as a legitimate, reportable outcome — not an error.
+
+- name: adapter_donation
+  reference_incident: "Edel Finance, July 2026, $403K loss"
+  target_type: adapter
+  target: goldAdapter
+  vuln_ref: "Vuln A"
+  preconditions:
+    - adapter exposes exchangeRate() or an equivalent conversion function
+    - conversion reads from a pool whose balance is publicly observable
+    - pool accepts a direct token transfer with no callback / no share minting
+  attack_template:
+    - flash_loan(collateral_token, amount=1_000_000e18)   # stand-in: mint attacker collateral on fork
+    - transfer_direct(pool, amount=999_000e18)            # inflate exchangeRate without minting shares
+    - deposit(adapter, small_amount=1_000e18)             # captured at the inflated rate
+    - mint(rwaUSD, max_allowed)                           # borrow against the inflated principal
+    - redeem(adapter, shares)                             # (optional) unwind back to collateral
+    - repay_flash_loan()
+  success_criteria:
+    - profit_usd > 0
+    - exchange_rate_delta_multiple > 10   # rate spikes >10x
+
+- name: unit_composition_error
+  reference_incident: "cbETH misconfig, Feb 2026, $1.78M loss"
+  target_type: price_router
+  target: xstockAdapter
+  vuln_ref: "Vuln B"
+  preconditions:
+    - a price path composes 2+ chained feeds OR omits a per-position multiplier
+    - at least one intermediate unit conversion the router does not fold in
+  attack_template:
+    - apply_corporate_action(adapter, multiplier=1.5e18)  # position compounds; router still prices raw feed
+    - deposit(mispriced_adapter, amount=10_000e18)
+    - mint(rwaUSD, max_allowed)
+  success_criteria:
+    - minted_value_diverges_from_true_value   # router value != multiplier-adjusted true value
+
+- name: stale_price_multicall
+  reference_incident: "Generic stale-read pattern (RWA multicall class)"
+  target_type: account_manager
+  target: goldAdapter
+  vuln_ref: "Vuln C"
+  preconditions:
+    - a multicall reads the price once and reuses it across multiple sub-operations
+    - an earlier sub-operation (or a preceding tx) can change state that affects that price
+  attack_template:
+    - transfer_direct(pool, amount=999_000e18)            # move the rate before the single read
+    - depositAndMint(adapter, amount=1_000e18)            # one read feeds both share-calc and principal
+  success_criteria:
+    - minted_value > expected_value_at_post_deposit_price
