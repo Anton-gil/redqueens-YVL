@@ -92,9 +92,9 @@
     "safety_multiplier": 10,
     "primary_candidate": {
       "class": "ExchangeRateDeltaBound",
-      "name": "ExchangeRateDeltaBound_D5C853",
+      "name": "ExchangeRateDeltaBound_564B49",
       "params": {
-        "adapter": "0xa513E6E4b8f2a923D98304ec87F64353C4D5C853",
+        "adapter": "0xa722bdA6968F50778B973Ae2701e90200C564B49",
         "max_delta_bps": 100,
         "window_blocks": 1
       },
@@ -107,10 +107,10 @@
     },
     "alternative_candidate": {
       "class": "AdapterConversionIntegrity",
-      "name": "AdapterConversionIntegrity_D5C853",
+      "name": "AdapterConversionIntegrity_564B49",
       "params": {
-        "adapter": "0xa513E6E4b8f2a923D98304ec87F64353C4D5C853",
-        "router": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
+        "adapter": "0xa722bdA6968F50778B973Ae2701e90200C564B49",
+        "router": "0x976C214741b4657bd99DFD38a5c0E3ac5C99D903",
         "tolerance_bps": 100
       },
       "threshold": {
@@ -214,9 +214,9 @@
     "safety_multiplier": 10,
     "primary_candidate": {
       "class": "ExchangeRateDeltaBound",
-      "name": "ExchangeRateDeltaBound_D5C853",
+      "name": "ExchangeRateDeltaBound_564B49",
       "params": {
-        "adapter": "0xa513E6E4b8f2a923D98304ec87F64353C4D5C853",
+        "adapter": "0xa722bdA6968F50778B973Ae2701e90200C564B49",
         "max_delta_bps": 100,
         "window_blocks": 1
       },
@@ -229,10 +229,10 @@
     },
     "alternative_candidate": {
       "class": "AdapterConversionIntegrity",
-      "name": "AdapterConversionIntegrity_D5C853",
+      "name": "AdapterConversionIntegrity_564B49",
       "params": {
-        "adapter": "0xa513E6E4b8f2a923D98304ec87F64353C4D5C853",
-        "router": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
+        "adapter": "0xa722bdA6968F50778B973Ae2701e90200C564B49",
+        "router": "0x976C214741b4657bd99DFD38a5c0E3ac5C99D903",
         "tolerance_bps": 100
       },
       "threshold": {

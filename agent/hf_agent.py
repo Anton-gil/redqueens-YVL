@@ -93,10 +93,14 @@ class HFDeepSeekAgent:
     name = "hf-deepseek-r1"
 
     def __init__(self):
-        if not config.HF_TOKEN:
-            raise RuntimeError("HF_TOKEN not set (put it in .env or the environment)")
-        self.client = OpenAI(base_url=config.HF_BASE_URL, api_key=config.HF_TOKEN)
-        self.model = config.HF_MODEL
+        ep = config.autonomous_endpoint()
+        if not ep:
+            raise RuntimeError("No autonomous backend set: put GROQ_API_KEY (preferred) or HF_TOKEN in .env")
+        self.client = OpenAI(base_url=ep["base_url"], api_key=ep["api_key"])
+        self.model = ep["model"]
+        self.endpoint = ep["base_url"]
+        self.tool_mode = ep["tool_mode"]
+        self.backend = ep["label"]
         self.tool_calls = []
         self.reasoning_log = []
         self.confirmed = []
@@ -221,7 +225,7 @@ class HFDeepSeekAgent:
     def run(self):
         deadline = time.time() + config.AUTONOMOUS_RUN_TIMEOUT_SECONDS
         start = time.time()
-        if config.HF_TOOL_MODE == "native":
+        if self.tool_mode == "native":
             mode = "tools"
             try:
                 final = self._run_tools_mode(deadline)
@@ -240,7 +244,8 @@ class HFDeepSeekAgent:
         result = {
             "agent": self.name,
             "model": self.model,
-            "endpoint": config.HF_BASE_URL,
+            "backend": self.backend,
+            "endpoint": self.endpoint,
             "mode": mode,
             "found": bool(self.confirmed),
             "confirmed_exploits": self.confirmed,
@@ -345,10 +350,11 @@ def run_hf_attack():
 
 
 def main():
-    if not config.has_hf():
-        print("HF_TOKEN not set. Add HF_TOKEN=hf_... to red-queen/.env or the environment.")
+    if not config.has_autonomous():
+        print("No autonomous backend set. Add GROQ_API_KEY (preferred) or HF_TOKEN to .env.")
         return
-    print("Autonomous agent: %s via %s" % (config.HF_MODEL, config.HF_BASE_URL))
+    ep = config.autonomous_endpoint()
+    print("Autonomous agent: %s via %s [%s]" % (ep["model"], ep["base_url"], ep["label"]))
     result = run_hf_attack()
     print("\n" + "=" * 70)
     print("mode=%s | tool calls=%d | confirmed exploits=%d | %.0fs" % (

@@ -1,5 +1,5 @@
 {
-  "guard": "ExchangeRateDeltaBound_D5C853",
+  "guard": "ExchangeRateDeltaBound_564B49",
   "threshold_bps": 1590,
   "window_blocks": 1,
   "forge_ok": true,

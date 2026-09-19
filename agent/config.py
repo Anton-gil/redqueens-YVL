@@ -31,7 +31,8 @@ FOUNDRY_BIN = next((p for p in _FOUNDRY_BIN_CANDIDATES if p and os.path.isdir(p)
 
 # Common misspellings mapped to the canonical env var the code + SDKs expect.
 _ENV_ALIASES = {"OPEN_AI_KEY": "OPENAI_API_KEY", "OPENAI_KEY": "OPENAI_API_KEY",
-                "ANTHROPIC_KEY": "ANTHROPIC_API_KEY", "CLAUDE_API_KEY": "ANTHROPIC_API_KEY"}
+                "ANTHROPIC_KEY": "ANTHROPIC_API_KEY", "CLAUDE_API_KEY": "ANTHROPIC_API_KEY",
+                "GROQ_KEY": "GROQ_API_KEY", "GROK_API_KEY": "GROQ_API_KEY"}
 
 
 def _load_dotenv():
@@ -95,6 +96,39 @@ AUTONOMOUS_RUN_TIMEOUT_SECONDS = int(os.environ.get("RED_QUEEN_AUTON_TIMEOUT", "
 
 def has_hf():
     return bool(HF_TOKEN)
+
+
+# --- Autonomous agent backend: Groq preferred (reliable native tool-calling + generous free tier) ---
+# Groq is OpenAI-compatible; unlike DeepSeek-R1 on the HF router it drives native function-calling
+# reliably. When GROQ_API_KEY is set it takes precedence over HF for the autonomous agent.
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+GROQ_BASE_URL = os.environ.get("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
+
+# NVIDIA NIM (build.nvidia.com) — OpenAI-compatible, generous free credits, and (verified) does
+# reliable NATIVE tool-calling with nemotron-3-ultra, unlike the HF-router reasoning models.
+NVIDIA_API_KEY = os.environ.get("NVIDIA_API_KEY", "")
+NVIDIA_BASE_URL = os.environ.get("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
+NVIDIA_MODEL = os.environ.get("NVIDIA_MODEL", "nvidia/nemotron-3-ultra-550b-a55b")
+
+
+def has_autonomous():
+    return bool(NVIDIA_API_KEY or GROQ_API_KEY or HF_TOKEN)
+
+
+def autonomous_endpoint():
+    """Resolve the autonomous-agent backend as a dict, or None. NVIDIA NIM first (verified native
+    tool-calling), then Groq, then the HF router."""
+    if NVIDIA_API_KEY:
+        return {"api_key": NVIDIA_API_KEY, "base_url": NVIDIA_BASE_URL, "model": NVIDIA_MODEL,
+                "tool_mode": os.environ.get("RED_QUEEN_NVIDIA_MODE", "native"), "label": "nvidia"}
+    if GROQ_API_KEY:
+        return {"api_key": GROQ_API_KEY, "base_url": GROQ_BASE_URL, "model": GROQ_MODEL,
+                "tool_mode": os.environ.get("RED_QUEEN_GROQ_MODE", "native"), "label": "groq"}
+    if HF_TOKEN:
+        return {"api_key": HF_TOKEN, "base_url": HF_BASE_URL, "model": HF_MODEL,
+                "tool_mode": HF_TOOL_MODE, "label": "hf"}
+    return None
 
 # Rough per-token USD prices for the budget guard (input, output). Deliberately conservative;
 # the guard is a runaway-bill kill switch, not accounting.

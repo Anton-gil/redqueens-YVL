@@ -596,6 +596,28 @@ html .status-dot.synthesizing{ background:var(--arc-cyan); color:var(--arc-cyan)
 html .status-dot.hardened{ background:var(--arc-green); color:var(--arc-green); }
 
 /* ---------- CABINETS ---------- */
+/* ---------- CONTROL BAR (START ATTACK + target dropdown) ---------- */
+html .controlbar{
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  padding:12px 18px; margin:0; position:relative; z-index:1;
+  background:linear-gradient(180deg,#160f42,#0e0a30); border-bottom:3px solid var(--arc-edge);
+}
+html .cb-label{ font-family:var(--pix); font-size:8px; letter-spacing:1px; color:var(--arc-cyan); }
+html #targetSel{
+  font-family:var(--body); font-size:16px; color:var(--arc-ink); background:#0c0930;
+  border:2px solid var(--arc-edge); box-shadow:3px 3px 0 var(--arc-edge); padding:6px 8px; border-radius:0;
+}
+html #startBtn{
+  font-family:var(--pix); font-size:10px; letter-spacing:1px; cursor:pointer;
+  background:var(--arc-red); color:#fff; border:2px solid var(--arc-edge);
+  box-shadow:4px 4px 0 var(--arc-edge); padding:9px 14px; border-radius:0;
+  text-shadow:1px 1px 0 var(--arc-edge);
+}
+html #startBtn:hover{ filter:brightness(1.15); }
+html #startBtn:active{ transform:translate(2px,2px); box-shadow:2px 2px 0 var(--arc-edge); }
+html #startBtn:disabled{ background:var(--arc-faint); cursor:not-allowed; box-shadow:2px 2px 0 var(--arc-edge); }
+html .cb-msg{ font-family:var(--body); font-size:15px; color:var(--arc-yellow); }
+
 html .split{ gap:16px; padding:16px; align-items:start; }
 html .panel{
   background:linear-gradient(180deg,var(--arc-panel2),var(--arc-panel));
@@ -716,6 +738,17 @@ html .stat-cell .stat-label{ font-family:var(--pix); font-size:7px; letter-spaci
     <span id="statusDot" class="status-dot idle"></span>
   </div>
 </header>
+
+<div class="controlbar">
+  <span class="cb-label">TARGET</span>
+  <select id="targetSel">
+    <option value="all">All contracts</option>
+    <option value="adapter_donation">GoldAdapter — donation / rate-inflation</option>
+    <option value="stale_price_multicall">AccountManager — stale-price multicall</option>
+  </select>
+  <button id="startBtn" type="button">&gt; START ATTACK</button>
+  <span id="startMsg" class="cb-msg"></span>
+</div>
 
 <div class="split">
   <!-- ================= LEFT: ATTACKER ================= -->
@@ -916,7 +949,7 @@ html .stat-cell .stat-label{ font-family:var(--pix); font-size:7px; letter-spaci
   var STATUS_LABELS = { idle: "IDLE", attacking: "ATTACKING", synthesizing: "SYNTHESIZING", hardened: "HARDENED" };
 
   var STATE_URL = "../orchestrator/state/state.json";
-  var POLL_INTERVAL_MS = 4000;
+  var POLL_INTERVAL_MS = 800;
   var usingLiveData = false;
 
   function escapeHtml(s) {
@@ -1086,6 +1119,32 @@ html .stat-cell .stat-label{ font-family:var(--pix); font-size:7px; letter-spaci
   render(SAMPLE_STATE);
   poll();
   setInterval(poll, POLL_INTERVAL_MS);
+})();
+</script>
+<script>
+(function () {
+  var btn = document.getElementById("startBtn");
+  var sel = document.getElementById("targetSel");
+  var msg = document.getElementById("startMsg");
+  if (!btn) return;
+  btn.addEventListener("click", function () {
+    var t = sel.value;
+    btn.disabled = true;
+    msg.textContent = "launching " + t + " ...";
+    fetch("/api/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target: t })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        msg.textContent = d.busy ? "a run is already in progress" : ("attacking: " + (d.target || t));
+      })
+      .catch(function () {
+        msg.textContent = "cannot reach backend — run: python3 -m orchestrator.server";
+      })
+      .finally(function () { setTimeout(function () { btn.disabled = false; }, 3000); });
+  });
 })();
 </script>
 </body>
