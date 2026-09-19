@@ -70,7 +70,11 @@ contract GuardReAttackTest is Setup {
         guard = new GuardedGoldDeposit(accountManager, goldAdapter, goldToken);
     }
 
-    function testReAttackReverts() public {
+    // NOTE: this only reverts because the legit deposit above prewarms the per-block checkpoint in
+    // THIS block. In a fresh block, via depositAndMint, or via a direct AccountManager.deposit call
+    // the v1 guard is BYPASSED (see orchestrator/state/bypass_report.json, version v1). The real fix
+    // is the anchored chokepoint in AccountManagerV2 (see test/GuardV2.t.sol).
+    function testReAttackReverts_prewarmedCheckpointOnly() public {
         // 1. legitimate guarded deposit establishes the checkpoint at the fair rate
         address legit = makeAddr("legit_guard");
         goldToken.mint(legit, 100e18);
@@ -140,7 +144,7 @@ def compile_and_deploy_guard(threshold_bps, window_blocks=1):
     try:
         rc, out, err = _run(["forge", "test", "--match-path", "test/%s" % reattack_path.name, "-vvv"])
         combined = out + "\n" + err
-        reverts = bool(re.search(r"\[PASS\]\s+testReAttackReverts", combined))
+        reverts = bool(re.search(r"\[PASS\]\s+testReAttackReverts_prewarmedCheckpointOnly", combined))
         noop_plain = _grep_int(combined, r"GAS_NOOP_PLAIN\s+(\d+)")
         noop_cold = _grep_int(combined, r"GAS_NOOP_COLD\s+(\d+)")
         noop_warm = _grep_int(combined, r"GAS_NOOP_WARM\s+(\d+)")
